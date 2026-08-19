@@ -9,6 +9,8 @@
       --bg: #1e1e1e; --panel: #2b2b2b; --text: #eee; --accent: #7c3aed; 
       --border: #444; --danger: #ff4d4f; --success: #4caf50; --custom-text: #a5d6a7;
       --warning: #ffb74d; --secondary: #0ea5e9;
+      --trigger-color: #f59e0b; --trigger-bg: rgba(245, 158, 11, 0.2);
+      --trigger-border: rgba(245, 158, 11, 0.5);
     }
     body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex; overflow: hidden; font-size: 11px; }
     
@@ -36,21 +38,42 @@
     #center-panel { background: #111; display: flex; flex-direction: column; position: relative; }
     #preview-container { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; background: #0a0a0a; }
     #preview-stage-wrapper { background: white; box-shadow: 0 0 40px rgba(0,0,0,0.6); transition: transform 0.1s; border-radius: 8px; overflow: hidden; }
-    #preview-stage { position: relative; overflow: hidden; }
+    #preview-stage { position: relative; overflow: auto; }
+    
+    #preview-scroll-container { 
+        width: 100%; height: 100%; overflow: auto; position: absolute; top: 0; left: 0;
+        display: flex; flex-direction: column; align-items: center; padding: 40px 20px;
+    }
     
     /* Preview layer styles */
-    .preview-layer { position: absolute; display: block; background-size: 100% 100%; background-repeat: no-repeat; }
+    .preview-layer { position: absolute; display: block; background-size: 100% 100%; background-repeat: no-repeat; transition: opacity 0.3s, transform 0.3s; }
+    .preview-layer.has-trigger { border: 2px dashed var(--trigger-color); box-sizing: border-box; }
+    .preview-layer.trigger-active { border-color: var(--success); background-color: rgba(76, 175, 80, 0.1); }
     
-    /* Scroll indicator in preview */
-    #scroll-indicator {
-        position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-        width: 4px; height: 100px; background: rgba(255,255,255,0.1); border-radius: 2px;
-        overflow: hidden; display: none;
+    /* Trigger markers in preview */
+    .trigger-marker {
+        position: absolute; left: -30px; width: 24px; height: 24px;
+        background: var(--trigger-bg); border: 2px solid var(--trigger-color);
+        border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        font-size: 10px; z-index: 100; transition: 0.2s;
     }
-    #scroll-progress {
-        width: 100%; height: 0%; background: var(--accent); border-radius: 2px;
-        transition: height 0.1s;
+    .trigger-marker:hover { background: var(--trigger-color); transform: scale(1.2); }
+    .trigger-marker.active { background: var(--success); border-color: var(--success); }
+    .trigger-line {
+        position: absolute; left: -6px; width: 2px; height: 100vh;
+        background: var(--trigger-border); pointer-events: none;
     }
+    
+    /* Layer property badges */
+    .badge { font-size: 9px; padding: 2px 5px; border-radius: 4px; font-weight: bold; flex-shrink: 0; }
+    .badge-svg { background: rgba(255, 183, 77, 0.2); color: var(--warning); border: 1px solid rgba(255, 183, 77, 0.4); }
+    .badge-motion { background: rgba(14, 165, 233, 0.2); color: var(--secondary); border: 1px solid rgba(14, 165, 233, 0.4); }
+    .badge-pulse { background: rgba(167, 139, 250, 0.2); color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.4); }
+    .badge-trigger { background: var(--trigger-bg); color: var(--trigger-color); border: 1px solid var(--trigger-border); }
+    .badge-bg { background: rgba(100, 100, 100, 0.3); color: #aaa; border: 1px solid #555; }
+    .badge-title { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+    .badge-image { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .badge-button { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
 
     #playback-controls { height: 44px; background: #222; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 12px; }
     .btn-icon { 
@@ -222,14 +245,12 @@
           <div id="preview-stage-wrapper">
               <div id="preview-stage"></div>
           </div>
-          <div id="scroll-indicator">
-              <div id="scroll-progress"></div>
-          </div>
       </div>
       <div id="playback-controls">
         <button class="btn-icon" onclick="toggleScrollPreview()" title="Toggle Scroll Preview">📜</button>
         <button class="btn-icon" onclick="resetPreview()" title="Reset View">↺</button>
-        <span id="info-text" style="color:#888; font-size: 10px; margin-left: 8px;">Scroll to animate</span>
+        <button class="btn-icon" onclick="addTriggerToLayer()" title="Add Trigger to Selected Layer">⚡</button>
+        <span id="info-text" style="color:#888; font-size: 10px; margin-left: 8px;">Скролл для анимации | ⚡ Добавить триггер</span>
       </div>
     </div>
 
@@ -245,6 +266,47 @@
       
       <div id="settings-scroll-area">
         <div id="timeline-editor">
+            <!-- Layer Property Section -->
+            <div class="effect-section">
+                <div class="effect-header">
+                    <span>🏷️ Свойство слоя</span>
+                </div>
+                <div class="effect-content">
+                    <select id="layer-property-select" onchange="setLayerProperty(this.value)">
+                        <option value="">-- Выберите свойство --</option>
+                        <option value="background">Фон (Background)</option>
+                        <option value="title">Заголовок (Title)</option>
+                        <option value="image">Изображение (Image)</option>
+                        <option value="button">Кнопка (Button)</option>
+                        <option value="text">Текст (Text)</option>
+                        <option value="icon">Иконка (Icon)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Trigger Settings Section -->
+            <div class="effect-section">
+                <div class="effect-header">
+                    <span>⚡ Триггеры анимации</span>
+                </div>
+                <div class="effect-content">
+                    <div class="motion-toggle">
+                        <input type="checkbox" id="enable-trigger" onchange="toggleTriggerEnabled()">
+                        <span>Включить триггер</span>
+                    </div>
+                    <div style="font-size: 9px; color: #888; margin-bottom: 8px;">
+                        Триггер срабатывает когда слой появляется в области просмотра
+                    </div>
+                    <div class="step-row">
+                        <div style="flex:1;">
+                            <div class="step-label">Позиция триггера (%)</div>
+                            <input type="range" id="trigger-position" min="0" max="100" value="50" onchange="updateTriggerPosition(this.value)">
+                            <div style="text-align:center; font-size:9px; color:#888;" id="trigger-position-value">50%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Motion Effects Section -->
             <div class="effect-section">
                 <div class="effect-header">
@@ -360,6 +422,7 @@
     let clipboardSettings = null;
     let exportScale = 2;
     let scrollPreviewEnabled = false;
+    let triggerMarkers = []; // Store trigger marker elements
 
     // === INITIALIZATION ===
     window.addEventListener('load', () => {
@@ -434,12 +497,17 @@
             el.className = `layer-item ${layer.id === activeLayerId ? 'selected' : ''}`;
             el.onclick = () => { activeLayerId = layer.id; renderUI(); };
             
-            const layerData = projectSettings[activeFrameId]?.layers?.[layer.id] || { motionEffect: '', attentionEffect: '', customCss: '' };
+            const layerData = projectSettings[activeFrameId]?.layers?.[layer.id] || { motionEffect: '', attentionEffect: '', customCss: '', layerProperty: '', triggerEnabled: false };
             
             let badges = '';
             if (layer.exportFormat === 'SVG') badges += '<span class="badge badge-svg">SVG</span>';
+            if (layerData.layerProperty) {
+                const propBadges = { background: 'bg', title: 'title', image: 'image', button: 'button', text: 'text', icon: 'icon' };
+                if (propBadges[layerData.layerProperty]) badges += `<span class="badge badge-${propBadges[layerData.layerProperty]}">${layerData.layerProperty}</span>`;
+            }
             if (layerData.motionEffect) badges += '<span class="badge badge-motion">Scroll</span>';
             if (layerData.attentionEffect) badges += '<span class="badge badge-pulse">Effect</span>';
+            if (layerData.triggerEnabled) badges += '<span class="badge badge-trigger">⚡Trigger</span>';
             
             el.innerHTML = `
                 <div class="layer-info">
@@ -458,6 +526,14 @@
         }
         
         const layerData = projectSettings[activeFrameId].layers[activeLayerId];
+        
+        // Update layer property select
+        document.getElementById('layer-property-select').value = layerData.layerProperty || '';
+        
+        // Update trigger settings
+        document.getElementById('enable-trigger').checked = layerData.triggerEnabled || false;
+        document.getElementById('trigger-position').value = layerData.triggerPosition || 50;
+        document.getElementById('trigger-position-value').textContent = (layerData.triggerPosition || 50) + '%';
         
         // Update effect buttons state
         document.querySelectorAll('#motion-effects-grid .effect-btn').forEach(btn => {
@@ -510,6 +586,47 @@
         layerData.motionEnabled = document.getElementById('enable-motion').checked;
         saveSettings(activeFrameId);
         playPreview();
+    }
+
+    // === LAYER PROPERTY ===
+    function setLayerProperty(property) {
+        if (!activeLayerId) return showToast('Выберите слой');
+        const layerData = projectSettings[activeFrameId].layers[activeLayerId];
+        layerData.layerProperty = property;
+        saveSettings(activeFrameId);
+        renderLayersList();
+        showToast(`Свойство "${property}" применено`);
+    }
+
+    // === TRIGGER FUNCTIONS ===
+    function toggleTriggerEnabled() {
+        if (!activeLayerId) return;
+        const layerData = projectSettings[activeFrameId].layers[activeLayerId];
+        layerData.triggerEnabled = document.getElementById('enable-trigger').checked;
+        saveSettings(activeFrameId);
+        renderLayersList();
+        playPreview();
+    }
+
+    function updateTriggerPosition(value) {
+        if (!activeLayerId) return;
+        const layerData = projectSettings[activeFrameId].layers[activeLayerId];
+        layerData.triggerPosition = parseInt(value);
+        document.getElementById('trigger-position-value').textContent = value + '%';
+        saveSettings(activeFrameId);
+        playPreview();
+    }
+
+    function addTriggerToLayer() {
+        if (!activeLayerId) return showToast('Выберите слой для добавления триггера');
+        const layerData = projectSettings[activeFrameId].layers[activeLayerId];
+        layerData.triggerEnabled = true;
+        document.getElementById('enable-trigger').checked = true;
+        saveSettings(activeFrameId);
+        renderLayersList();
+        renderSettings();
+        playPreview();
+        showToast('Триггер добавлен к слою');
     }
 
     function updateSectionEffect(frameId, effect) {
@@ -567,7 +684,7 @@
     function toggleScrollPreview() {
         scrollPreviewEnabled = !scrollPreviewEnabled;
         document.querySelector('#playback-controls .btn-icon').classList.toggle('active', scrollPreviewEnabled);
-        document.getElementById('scroll-indicator').style.display = scrollPreviewEnabled ? 'block' : 'none';
+        // scroll-indicator removed
         playPreview();
     }
 
@@ -578,6 +695,10 @@
     function playPreview() {
         const stage = document.getElementById('preview-stage');
         stage.innerHTML = '';
+        
+        // Clear trigger markers
+        triggerMarkers.forEach(m => m.remove());
+        triggerMarkers = [];
         
         let style = document.getElementById('preview-css');
         if (style) style.remove();
@@ -596,16 +717,22 @@
         
         const settings = projectSettings[frame.id] || {};
         const sectionDiv = document.createElement('div');
-        sectionDiv.style.cssText = `position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: ${frame.bgColor}; overflow: hidden;`;
+        sectionDiv.style.cssText = `position: relative; top: 0; left: 0; width: 100%; height: ${frame.height}px; background: ${frame.bgColor}; overflow: visible;`;
         stage.appendChild(sectionDiv);
 
         frame.layers.forEach((layer, lIdx) => {
-            const layerData = settings.layers?.[layer.id] || { motionEffect: '', attentionEffect: '', customCss: '', motionEnabled: true };
+            const layerData = settings.layers?.[layer.id] || { motionEffect: '', attentionEffect: '', customCss: '', motionEnabled: true, triggerEnabled: false, triggerPosition: 50 };
             const blob = new Blob([normalizeBytes(layer.previewBytes)], { type: 'image/png' });
             const domId = `prev_L_${lIdx}`;
             const div = document.createElement('div');
             div.id = domId;
             div.className = 'preview-layer';
+            
+            // Add trigger class if enabled
+            if (layerData.triggerEnabled) {
+                div.classList.add('has-trigger');
+            }
+            
             div.style.cssText = `left: ${layer.x}px; top: ${layer.y}px; width: ${layer.width}px; height: ${layer.height}px; background-image: url(${URL.createObjectURL(blob)}); background-size: 100% 100%;`;
             
             // Apply motion effect
@@ -637,11 +764,40 @@
             }
             
             sectionDiv.appendChild(div);
+            
+            // Create trigger marker if enabled
+            if (layerData.triggerEnabled) {
+                const marker = document.createElement('div');
+                marker.className = 'trigger-marker';
+                marker.innerHTML = '⚡';
+                marker.title = `Триггер: ${layer.name} (${layerData.triggerPosition}%)`;
+                marker.style.top = (layer.y + layer.height / 2 - 12) + 'px';
+                
+                // Click to toggle trigger activation for preview
+                marker.onclick = (e) => {
+                    e.stopPropagation();
+                    marker.classList.toggle('active');
+                    div.classList.toggle('trigger-active');
+                    
+                    // Trigger the animation
+                    if (marker.classList.contains('active') && layerData.motionEffect) {
+                        div.style.animation = 'none';
+                        div.offsetHeight; /* trigger reflow */
+                        div.style.animation = `${layerData.motionEffect} 0.8s ease-out both`;
+                    }
+                };
+                
+                sectionDiv.appendChild(marker);
+                triggerMarkers.push(marker);
+                
+                // Add trigger line
+                const line = document.createElement('div');
+                line.className = 'trigger-line';
+                line.style.top = (layer.y + layer.height / 2) + 'px';
+                sectionDiv.appendChild(line);
+                triggerMarkers.push(line);
+            }
         });
-        
-        if (scrollPreviewEnabled) {
-            document.getElementById('scroll-progress').style.height = '100%';
-        }
     }
 
     function normalizeBytes(bytes) { 
@@ -662,7 +818,10 @@
                         motionEffect: '',
                         attentionEffect: '',
                         customCss: '',
-                        motionEnabled: true
+                        motionEnabled: true,
+                        layerProperty: '',
+                        triggerEnabled: false,
+                        triggerPosition: 50
                     };
                 }
             });
@@ -781,7 +940,13 @@
                         inlineStyle += `animation:${layerData.attentionEffect} 2s ease-in-out infinite;`;
                     }
                     
-                    layersHTML += `<div class="${layerClass}" style="${inlineStyle}"></div>`;
+                    // Add trigger data attributes for Intersection Observer
+                    let triggerAttrs = '';
+                    if (layerData.triggerEnabled) {
+                        triggerAttrs = `data-trigger="true" data-trigger-position="${layerData.triggerPosition || 50}"`;
+                    }
+                    
+                    layersHTML += `<div class="${layerClass}" style="${inlineStyle}" ${triggerAttrs}></div>`;
                     
                     // Add custom CSS
                     if (layerData.customCss) {
@@ -797,7 +962,7 @@
                 prevMaxHeight = Math.max(prevMaxHeight, frame.height);
             });
             
-            // Generate Intersection Observer script
+            // Generate Intersection Observer script with trigger support
             const observerScript = `
                 <script>
                 document.addEventListener('DOMContentLoaded', function() {
@@ -806,11 +971,13 @@
                         rootMargin: '0px',
                         threshold: 0.1
                     };
-                    
+
                     const observer = new IntersectionObserver((entries) => {
                         entries.forEach(entry => {
                             if (entry.isIntersecting) {
                                 const section = entry.target;
+
+                                // Handle layers with motion effects
                                 const layers = section.querySelectorAll('[style*="opacity:0"]');
                                 layers.forEach((layer, idx) => {
                                     setTimeout(() => {
@@ -818,15 +985,34 @@
                                         layer.style.opacity = '1';
                                     }, idx * 100);
                                 });
+
+                                // Handle trigger-based animations
+                                const triggerLayers = section.querySelectorAll('[data-trigger="true"]');
+                                triggerLayers.forEach(layer => {
+                                    const triggerPosition = parseInt(layer.dataset.triggerPosition) || 50;
+                                    const triggerThreshold = triggerPosition / 100;
+
+                                    if (entry.intersectionRatio >= triggerThreshold) {
+                                        layer.classList.add('trigger-active');
+                                        // Apply motion effect if defined in style
+                                        const hasMotionEffect = layer.style.backgroundImage && layer.style.opacity === '0';
+                                        if (hasMotionEffect) {
+                                            layer.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+                                            layer.style.opacity = '1';
+                                        }
+                                    } else {
+                                        layer.classList.remove('trigger-active');
+                                    }
+                                });
                             }
                         });
                     }, observerOptions);
-                    
+
                     document.querySelectorAll('.presentation-section').forEach(section => {
                         observer.observe(section);
                     });
                 });
-                <\/script>
+                <\\/script>
             `;
             
             // Responsive styles
