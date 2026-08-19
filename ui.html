@@ -635,8 +635,22 @@
         if (!activeLayerId) return showToast('Выберите слой');
         const layerData = projectSettings[activeFrameId].layers[activeLayerId];
         layerData.layerProperty = property;
+        const presets = {
+            background: { motionEffect: 'fadeInUp', attentionEffect: '' },
+            title: { motionEffect: 'fadeInUp', attentionEffect: '' },
+            image: { motionEffect: 'zoomIn', attentionEffect: '' },
+            button: { motionEffect: 'fadeInUp', attentionEffect: 'pulse' },
+            text: { motionEffect: 'fadeInLeft', attentionEffect: '' },
+            icon: { motionEffect: 'zoomIn', attentionEffect: 'pulse' }
+        };
+        if (property && presets[property]) {
+            if (!layerData.motionEffect) layerData.motionEffect = presets[property].motionEffect;
+            if (!layerData.attentionEffect) layerData.attentionEffect = presets[property].attentionEffect;
+        }
         saveSettings(activeFrameId);
         renderLayersList();
+        renderSettings();
+        playPreview();
         showToast(`Свойство "${property}" применено`);
     }
 
@@ -770,7 +784,7 @@
                 wrapper.appendChild(handle);
             });
             wrapper.addEventListener('click', (event) => {
-                if (triggerPlacementMode && event.target === stage) placeActiveTriggerAt(event.clientY);
+                if (triggerPlacementMode && !event.target.closest('.preview-resize-handle, .trigger-marker')) placeActiveTriggerAt(event.clientY);
             });
             wrapper.addEventListener('scroll', handlePreviewScroll, { passive: true });
         }
@@ -978,7 +992,8 @@
                         motionEnabled: true,
                         layerProperty: '',
                         triggerEnabled: false,
-                        triggerPosition: 50
+                        triggerPosition: 50,
+                        triggerY: null
                     };
                 }
             });
@@ -1097,11 +1112,14 @@
                         inlineStyle += `animation:${layerData.attentionEffect} 2s ease-in-out infinite;`;
                     }
                     
-                    // Add trigger data attributes for Intersection Observer
+                    // Store the exact layout coordinate so the exported page uses
+                    // the same trigger placement as the plugin preview.
                     let triggerAttrs = '';
                     if (layerData.triggerEnabled) {
-                        triggerAttrs = `data-trigger="true" data-trigger-position="${layerData.triggerPosition || 50}"`;
+                        const triggerY = layerData.triggerY == null ? layer.y + layer.height / 2 : layerData.triggerY;
+                        triggerAttrs = `data-trigger="true" data-trigger-y="${triggerY}" data-layer-name="${layer.name.replace(/"/g, '&quot;')}"`;
                     }
+                    if (layerData.motionEffect) inlineStyle += `--motion-effect:${layerData.motionEffect};`;
                     
                     layersHTML += `<div class="${layerClass}" style="${inlineStyle}" ${triggerAttrs}></div>`;
                     
@@ -1112,62 +1130,45 @@
                 });
                 
                 // Section styling
-                const sectionStyle = `min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;background:${frame.bgColor};overflow:hidden;`;
+                const sectionStyle = `width:${frame.width}px;height:${frame.height}px;min-height:${frame.height}px;margin:0 auto;display:block;position:relative;background:${frame.bgColor};overflow:hidden;`;
                 
                 sectionsHTML += `<section id="${sectionId}" class="presentation-section" style="${sectionStyle}">${layersHTML}</section>`;
                 
                 prevMaxHeight = Math.max(prevMaxHeight, frame.height);
             });
             
-            // Generate Intersection Observer script with trigger support
+            // Generate a scroll-driven trigger script that uses each layer's
+            // own coordinate instead of treating the whole section as one trigger.
             const observerScript = `
                 <script>
                 document.addEventListener('DOMContentLoaded', function() {
-                    const observerOptions = {
-                        root: null,
-                        rootMargin: '0px',
-                        threshold: 0.1
-                    };
-
-                    const observer = new IntersectionObserver((entries) => {
-                        entries.forEach(entry => {
-                            if (entry.isIntersecting) {
-                                const section = entry.target;
-
-                                // Handle layers with motion effects
-                                const layers = section.querySelectorAll('[style*="opacity:0"]');
-                                layers.forEach((layer, idx) => {
-                                    setTimeout(() => {
-                                        layer.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
-                                        layer.style.opacity = '1';
-                                    }, idx * 100);
-                                });
-
-                                // Handle trigger-based animations
-                                const triggerLayers = section.querySelectorAll('[data-trigger="true"]');
-                                triggerLayers.forEach(layer => {
-                                    const triggerPosition = parseInt(layer.dataset.triggerPosition) || 50;
-                                    const triggerThreshold = triggerPosition / 100;
-
-                                    if (entry.intersectionRatio >= triggerThreshold) {
-                                        layer.classList.add('trigger-active');
-                                        // Apply motion effect if defined in style
-                                        const hasMotionEffect = layer.style.backgroundImage && layer.style.opacity === '0';
-                                        if (hasMotionEffect) {
-                                            layer.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
-                                            layer.style.opacity = '1';
-                                        }
-                                    } else {
-                                        layer.classList.remove('trigger-active');
-                                    }
-                                });
+                    const triggered = new WeakSet();
+                    function runTriggers() {
+                        document.querySelectorAll('[data-trigger="true"]').forEach(layer => {
+                            const point = Number(layer.dataset.triggerY || 0);
+                            const section = layer.closest('.presentation-section');
+                            const sectionTop = section.getBoundingClientRect().top;
+                            const triggerLine = sectionTop + point;
+                            const inView = triggerLine >= 0 && triggerLine <= window.innerHeight;
+                            if (inView && !triggered.has(layer)) {
+                                triggered.add(layer);
+                                layer.classList.add('trigger-active');
+                                const effect = layer.style.getPropertyValue('--motion-effect');
+                                if (effect) {
+                                    layer.style.animation = 'none';
+                                    void layer.offsetWidth;
+                                    layer.style.animation = effect + ' .8s ease-out both';
+                                }
+                                layer.style.opacity = '1';
+                            } else if (!inView) {
+                                triggered.delete(layer);
+                                layer.classList.remove('trigger-active');
                             }
                         });
-                    }, observerOptions);
-
-                    document.querySelectorAll('.presentation-section').forEach(section => {
-                        observer.observe(section);
-                    });
+                    }
+                    window.addEventListener('scroll', runTriggers, { passive: true });
+                    window.addEventListener('resize', runTriggers);
+                    runTriggers();
                 });
                 <\\/script>
             `;

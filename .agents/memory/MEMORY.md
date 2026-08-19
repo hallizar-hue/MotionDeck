@@ -1,0 +1,1 @@
+- [Replit config auto-modules](replit-config-auto-modules.md) — runtime checks can unexpectedly add language modules to `.replit`; restore unrelated generated changes before finishing.
