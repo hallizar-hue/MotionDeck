@@ -1100,6 +1100,66 @@
     };
 
     // === GENERATE FINAL HTML ===
+    function getEdgeColorFromAsset(assetObj) {
+        return new Promise((resolve) => {
+            if (!assetObj) return resolve(null);
+            let sourceUrl = '';
+            try {
+                if (assetObj.ext === 'svg') {
+                    const svgText = new TextDecoder().decode(normalizeBytes(assetObj.data));
+                    sourceUrl = 'data:image/svg+xml;base64,' + btoa(svgText);
+                } else {
+                    sourceUrl = URL.createObjectURL(new Blob([normalizeBytes(assetObj.data)], { type: assetObj.mime || 'image/png' }));
+                }
+                const image = new Image();
+                image.onload = () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        const size = 64;
+                        canvas.width = size;
+                        canvas.height = size;
+                        const context = canvas.getContext('2d', { willReadFrequently: true });
+                        context.drawImage(image, 0, 0, size, size);
+                        const pixels = context.getImageData(0, 0, size, size).data;
+                        let r = 0, g = 0, b = 0, weight = 0;
+                        const addPixel = (x, y) => {
+                            const index = (y * size + x) * 4;
+                            const alpha = pixels[index + 3] / 255;
+                            if (alpha < 0.05) return;
+                            r += pixels[index] * alpha;
+                            g += pixels[index + 1] * alpha;
+                            b += pixels[index + 2] * alpha;
+                            weight += alpha;
+                        };
+                        for (let i = 0; i < size; i += 2) {
+                            addPixel(0, i); addPixel(size - 1, i);
+                            addPixel(i, 0); addPixel(i, size - 1);
+                        }
+                        resolve(weight ? `rgb(${Math.round(r / weight)}, ${Math.round(g / weight)}, ${Math.round(b / weight)})` : null);
+                    } catch (error) {
+                        console.warn('Не удалось определить цвет краёв изображения', error);
+                        resolve(null);
+                    } finally {
+                        if (sourceUrl.startsWith('blob:')) URL.revokeObjectURL(sourceUrl);
+                    }
+                };
+                image.onerror = () => {
+                    if (sourceUrl.startsWith('blob:')) URL.revokeObjectURL(sourceUrl);
+                    resolve(null);
+                };
+                image.src = sourceUrl;
+            } catch (error) {
+                resolve(null);
+            }
+        });
+    }
+
+    async function getExportBackgroundColor(frame, settings, assets) {
+        const backgroundLayer = frame.layers.find(layer => settings.layers?.[layer.id]?.layerProperty === 'background') || frame.layers[0];
+        const sampledColor = backgroundLayer ? await getEdgeColorFromAsset(assets[backgroundLayer.id]) : null;
+        return sampledColor || frame.bgColor || '#111111';
+    }
+
     async function generateFinalHTML(assets) {
         try {
             const zip = new JSZip();
@@ -1115,9 +1175,10 @@
             let sectionsHTML = '';
             let prevMaxHeight = 0;
             
-            framesData.forEach((frame, frameIdx) => {
+            for (const [frameIdx, frame] of framesData.entries()) {
                 const settings = projectSettings[frame.id] || { scrollEffect: 'fadeInUp', layers: {} };
                 const sectionId = `section-${frameIdx}`;
+                const backgroundColor = await getExportBackgroundColor(frame, settings, assets);
                 
                 let layersHTML = '';
                 frame.layers.forEach((layer, layerIdx) => {
@@ -1146,7 +1207,7 @@
                     // Add motion effect class
                     if (layerData.motionEnabled && layerData.motionEffect) {
                         inlineStyle += `opacity:0;`;
-                        // Will be animated by Intersection Observer
+                        triggerAttrs += `data-motion="true"`;
                     }
                     
                     // Add attention effect
@@ -1171,45 +1232,71 @@
                     }
                 });
                 
-                // Section styling
-                const sectionStyle = `width:${frame.width}px;height:${frame.height}px;min-height:${frame.height}px;margin:0 auto;display:block;position:relative;background:${frame.bgColor};overflow:hidden;`;
+                // The section is the browser viewport; the original frame is
+                // centered inside it and scaled proportionally at runtime.
+                const sectionStyle = `background-color:${backgroundColor};`;
+                const contentStyle = `width:${frame.width}px;height:${frame.height}px;`;
                 
-                sectionsHTML += `<section id="${sectionId}" class="presentation-section" style="${sectionStyle}">${layersHTML}</section>`;
+                sectionsHTML += `<section id="${sectionId}" class="presentation-section" style="${sectionStyle}"><div class="slide-content" style="${contentStyle}">${layersHTML}</div></section>`;
                 
                 prevMaxHeight = Math.max(prevMaxHeight, frame.height);
-            });
+            }
             
-            // Generate a scroll-driven trigger script that uses each layer's
-            // own coordinate instead of treating the whole section as one trigger.
+            // Generate a browser-like scaler and scroll-driven trigger script.
             const observerScript = `
                 <script>
                 document.addEventListener('DOMContentLoaded', function() {
+                    function scaleSlide(section) {
+                        const content = section.querySelector('.slide-content');
+                        if (!content) return;
+                        const scaleX = section.clientWidth / content.offsetWidth;
+                        const scaleY = section.clientHeight / content.offsetHeight;
+                        const scale = Math.min(scaleX, scaleY);
+                        content.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+                    }
+
+                    function scaleAllSlides() {
+                        document.querySelectorAll('.presentation-section').forEach(scaleSlide);
+                    }
+
                     const triggered = new WeakSet();
                     function runTriggers() {
-                        document.querySelectorAll('[data-trigger="true"]').forEach(layer => {
-                            const point = Number(layer.dataset.triggerY || 0);
-                            const section = layer.closest('.presentation-section');
-                            const sectionTop = section.getBoundingClientRect().top;
-                            const triggerLine = sectionTop + point;
-                            const inView = triggerLine >= 0 && triggerLine <= window.innerHeight;
-                            if (inView && !triggered.has(layer)) {
-                                triggered.add(layer);
-                                layer.classList.add('trigger-active');
-                                const effect = layer.style.getPropertyValue('--motion-effect');
-                                if (effect) {
-                                    layer.style.animation = 'none';
-                                    void layer.offsetWidth;
-                                    layer.style.animation = effect + ' .8s ease-out both';
+                        document.querySelectorAll('.presentation-section').forEach(section => {
+                            const sectionRect = section.getBoundingClientRect();
+                            const content = section.querySelector('.slide-content');
+                            const scale = content && content.offsetWidth ? content.getBoundingClientRect().width / content.offsetWidth : 1;
+                            const sectionInView = sectionRect.bottom > 0 && sectionRect.top < window.innerHeight;
+                            section.querySelectorAll('[data-motion="true"]').forEach(layer => {
+                                const point = layer.dataset.trigger === 'true'
+                                    ? sectionRect.top + Number(layer.dataset.triggerY || 0) * scale
+                                    : sectionRect.top + sectionRect.height * 0.5;
+                                const inView = layer.dataset.trigger === 'true'
+                                    ? point >= 0 && point <= window.innerHeight
+                                    : sectionInView;
+                                if (inView && !triggered.has(layer)) {
+                                    triggered.add(layer);
+                                    layer.classList.add('trigger-active');
+                                    const effect = layer.style.getPropertyValue('--motion-effect');
+                                    if (effect) {
+                                        layer.style.animation = 'none';
+                                        void layer.offsetWidth;
+                                        layer.style.animation = effect + ' .8s ease-out both';
+                                    }
+                                    layer.style.opacity = '1';
+                                } else if (!inView) {
+                                    triggered.delete(layer);
+                                    layer.classList.remove('trigger-active');
+                                    layer.style.opacity = '0';
                                 }
-                                layer.style.opacity = '1';
-                            } else if (!inView) {
-                                triggered.delete(layer);
-                                layer.classList.remove('trigger-active');
-                            }
+                            });
                         });
                     }
+                    scaleAllSlides();
                     window.addEventListener('scroll', runTriggers, { passive: true });
-                    window.addEventListener('resize', runTriggers);
+                    window.addEventListener('resize', () => {
+                        scaleAllSlides();
+                        runTriggers();
+                    });
                     runTriggers();
                 });
                 <\\/script>
@@ -1217,12 +1304,25 @@
             
             // Responsive styles
             const responsiveCSS = `
-                @media (max-width: 768px) {
-                    .presentation-section { min-height: 100vh !important; }
-                    .presentation-section > div { 
-                        transform-origin: top left !important; 
-                    }
+                html, body { width: 100%; min-height: 100%; overflow-x: hidden; }
+                body { background: #000; }
+                .presentation-section {
+                    position: relative;
+                    width: 100vw;
+                    height: 100vh;
+                    min-height: 100vh;
+                    overflow: hidden;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
                 }
+                .slide-content {
+                    position: absolute;
+                    left: 50%;
+                    top: 50%;
+                    transform-origin: center center;
+                }
+                .trigger-active { outline: 2px solid rgba(255,255,255,.35); }
             `;
             
             const finalHTML = `<!DOCTYPE html>

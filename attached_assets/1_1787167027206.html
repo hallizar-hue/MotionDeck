@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Presentation</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow-x: hidden; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000; }
+
+        .presentation-section {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #e2eafb; /* fallback */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide-content {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 1080px;
+            height: 1080px;
+            transform-origin: center center;
+        }
+
+        /* Анимации (ваши) */
+                @keyframes fadeInUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-40px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeInLeft { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes fadeInRight { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes zoomIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+        @keyframes zoomOut { from { opacity: 0; transform: scale(1.2); } to { opacity: 1; transform: scale(1); } }
+        @keyframes rotateIn { from { opacity: 0; transform: rotate(-180deg) scale(0.5); } to { opacity: 1; transform: rotate(0) scale(1); } }
+        @keyframes slideInUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes slideInDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+        @keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes bounceIn { 0% { opacity: 0; transform: scale(0.3); } 50% { opacity: 1; transform: scale(1.05); } 70% { transform: scale(0.9); } 100% { transform: scale(1); } }
+        @keyframes flipInX { from { transform: perspective(400px) rotateX(90deg); opacity: 0; } to { transform: perspective(400px) rotateX(0); opacity: 1; } }
+        @keyframes flipInY { from { transform: perspective(400px) rotateY(90deg); opacity: 0; } to { transform: perspective(400px) rotateY(0); opacity: 1; } }
+
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        @keyframes glow { 0%, 100% { filter: drop-shadow(0 0 5px currentColor); } 50% { filter: drop-shadow(0 0 20px currentColor); } }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes heartbeat { 0%, 100% { transform: scale(1); } 14% { transform: scale(1.15); } 28% { transform: scale(1); } 42% { transform: scale(1.15); } 70% { transform: scale(1); } }
+        @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        
+        /* ... остальные анимации ... */
+    </style>
+</head>
+<body>
+    <section id="section-0" class="presentation-section">
+        <div class="slide-content">
+            <div class="section-0-layer-0" style="position:absolute;left:40px;top:59px;width:988px;height:993.6121826171875px;background-image:url('assets/section-0-0.png');background-size:100% 100%;background-repeat:no-repeat;opacity:0;--motion-effect:flipInX;" data-trigger="true" data-trigger-y="556" data-layer-name="Group 2136142544"></div>
+            <div class="section-0-layer-1" style="position:absolute;left:233px;top:287px;width:610px;height:610px;background-image:url('assets/section-0-1.png');background-size:100% 100%;background-repeat:no-repeat;opacity:0;animation:pulse 2s ease-in-out infinite;--motion-effect:fadeInUp;" data-trigger="true" data-trigger-y="500"></div>
+    </section>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // ---- Масштабирование ----
+            function scaleSlide(section) {
+                const content = section.querySelector('.slide-content');
+                if (!content) return;
+                const scaleX = section.clientWidth / 1080;
+                const scaleY = section.clientHeight / 1080;
+                const scale = Math.min(scaleX, scaleY);
+                content.style.transform = `translate(-50%, -50%) scale(${scale})`;
+            }
+
+            function scaleAllSlides() {
+                document.querySelectorAll('.presentation-section').forEach(scaleSlide);
+            }
+
+            // ---- Триггеры анимаций (ваш код с небольшими правками) ----
+            const triggered = new WeakSet();
+            function runTriggers() {
+                document.querySelectorAll('[data-trigger="true"]').forEach(layer => {
+                    const point = Number(layer.dataset.triggerY || 0);
+                    const section = layer.closest('.presentation-section');
+                    const sectionTop = section.getBoundingClientRect().top;
+                    const triggerLine = sectionTop + point;
+                    const inView = triggerLine >= 0 && triggerLine <= window.innerHeight;
+                    if (inView && !triggered.has(layer)) {
+                        triggered.add(layer);
+                        layer.classList.add('trigger-active');
+                        const effect = layer.style.getPropertyValue('--motion-effect');
+                        if (effect) {
+                            layer.style.animation = 'none';
+                            void layer.offsetWidth;
+                            layer.style.animation = effect + ' .8s ease-out both';
+                        }
+                        layer.style.opacity = '1';
+                    } else if (!inView) {
+                        triggered.delete(layer);
+                        layer.classList.remove('trigger-active');
+                    }
+                });
+            }
+
+            // ---- Подбор цвета фона по краям изображения ----
+            function getEdgeColor(imageUrl, callback) {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const w = img.naturalWidth;
+                    const h = img.naturalHeight;
+                    canvas.width = w;
+                    canvas.height = h;
+                    ctx.drawImage(img, 0, 0, w, h);
+
+                    const samplePoints = 10;
+                    let r = 0, g = 0, b = 0, count = 0;
+                    for (let i = 0; i < samplePoints; i++) {
+                        const y = Math.floor((h / (samplePoints + 1)) * (i + 1));
+                        const left = ctx.getImageData(0, y, 1, 1).data;
+                        const right = ctx.getImageData(w - 1, y, 1, 1).data;
+                        r += left[0] + right[0];
+                        g += left[1] + right[1];
+                        b += left[2] + right[2];
+                        count += 2;
+                    }
+                    const color = `rgb(${Math.round(r/count)}, ${Math.round(g/count)}, ${Math.round(b/count)})`;
+                    callback(color);
+                };
+                img.src = imageUrl;
+            }
+
+            function applyBackgroundColors() {
+                document.querySelectorAll('.presentation-section').forEach(section => {
+                    const layer = section.querySelector('[style*="background-image"]');
+                    if (!layer) return;
+                    const urlMatch = layer.style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
+                    if (urlMatch && urlMatch[1]) {
+                        getEdgeColor(urlMatch[1], (color) => {
+                            section.style.backgroundColor = color;
+                        });
+                    }
+                });
+            }
+
+            // Инициализация
+            scaleAllSlides();
+            runTriggers();
+            applyBackgroundColors();
+
+            // Обработчики событий
+            window.addEventListener('resize', () => {
+                scaleAllSlides();
+                runTriggers();
+            });
+            window.addEventListener('scroll', runTriggers, { passive: true });
+        });
+    </script>
+</body>
+</html>
