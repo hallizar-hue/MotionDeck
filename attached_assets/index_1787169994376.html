@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Presentation</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000; }
+        .presentation-section { width: 100%; }
+        
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-40px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeInLeft { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes fadeInRight { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes zoomIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+        @keyframes zoomOut { from { opacity: 0; transform: scale(1.2); } to { opacity: 1; transform: scale(1); } }
+        @keyframes rotateIn { from { opacity: 0; transform: rotate(-180deg) scale(0.5); } to { opacity: 1; transform: rotate(0) scale(1); } }
+        @keyframes slideInUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes slideInDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+        @keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes bounceIn { 0% { opacity: 0; transform: scale(0.3); } 50% { opacity: 1; transform: scale(1.05); } 70% { transform: scale(0.9); } 100% { transform: scale(1); } }
+        @keyframes flipInX { from { transform: perspective(400px) rotateX(90deg); opacity: 0; } to { transform: perspective(400px) rotateX(0); opacity: 1; } }
+        @keyframes flipInY { from { transform: perspective(400px) rotateY(90deg); opacity: 0; } to { transform: perspective(400px) rotateY(0); opacity: 1; } }
+    
+
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@keyframes glow { 0%, 100% { filter: drop-shadow(0 0 5px currentColor); } 50% { filter: drop-shadow(0 0 20px currentColor); } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes heartbeat { 0%, 100% { transform: scale(1); } 14% { transform: scale(1.15); } 28% { transform: scale(1); } 42% { transform: scale(1.15); } 70% { transform: scale(1); } }
+@keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+
+        
+        
+                html, body { width: 100%; min-height: 100%; overflow-x: hidden; }
+                body { background: #000; }
+                .presentation-section {
+                    position: relative;
+                    width: 100vw;
+                    height: 100vh;
+                    min-height: 100vh;
+                    overflow: hidden;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .slide-content {
+                    position: absolute;
+                    left: 50%;
+                    top: 50%;
+                    transform-origin: center center;
+                }
+                .trigger-active { outline: 2px solid rgba(255,255,255,.35); }
+            
+    </style>
+</head>
+<body>
+    <section id="section-0" class="presentation-section" style="background-color:rgb(226, 234, 251);"><div class="slide-content" style="width:1080px;height:1080px;"><div class="section-0-layer-0" style="position:absolute;left:0px;top:0px;width:1080px;height:1080px;background-image:url('assets/section-0-0.png');background-size:100% 100%;background-repeat:no-repeat;" data-trigger="true" data-trigger-y="252" data-layer-name="Rectangle 2085656241"></div><div class="section-0-layer-1" style="position:absolute;left:40px;top:59px;width:988px;height:993.6121826171875px;background-image:url('assets/section-0-1.png');background-size:100% 100%;background-repeat:no-repeat;opacity:0;--motion-effect:fadeInDown;" data-trigger="true" data-trigger-y="82" data-layer-name="Group 2136142544"></div><div class="section-0-layer-2" style="position:absolute;left:233px;top:287px;width:610px;height:610px;background-image:url('assets/section-0-2.png');background-size:100% 100%;background-repeat:no-repeat;animation:pulse 2s ease-in-out infinite;" data-trigger="true" data-trigger-y="511" data-layer-name="Слой 3 1"></div></div></section>
+    
+                <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    function scaleSlide(section) {
+                        const content = section.querySelector('.slide-content');
+                        if (!content) return;
+                        const scaleX = section.clientWidth / content.offsetWidth;
+                        const scaleY = section.clientHeight / content.offsetHeight;
+                        const scale = Math.min(scaleX, scaleY);
+                        content.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+                    }
+
+                    function scaleAllSlides() {
+                        document.querySelectorAll('.presentation-section').forEach(scaleSlide);
+                    }
+
+                    const triggered = new WeakSet();
+                    function runTriggers() {
+                        document.querySelectorAll('.presentation-section').forEach(section => {
+                            const sectionRect = section.getBoundingClientRect();
+                            const content = section.querySelector('.slide-content');
+                            const scale = content && content.offsetWidth ? content.getBoundingClientRect().width / content.offsetWidth : 1;
+                            const sectionInView = sectionRect.bottom > 0 && sectionRect.top < window.innerHeight;
+                            section.querySelectorAll('[data-motion="true"]').forEach(layer => {
+                                const point = layer.dataset.trigger === 'true'
+                                    ? sectionRect.top + Number(layer.dataset.triggerY || 0) * scale
+                                    : sectionRect.top + sectionRect.height * 0.5;
+                                const inView = layer.dataset.trigger === 'true'
+                                    ? point >= 0 && point <= window.innerHeight
+                                    : sectionInView;
+                                if (inView && !triggered.has(layer)) {
+                                    triggered.add(layer);
+                                    layer.classList.add('trigger-active');
+                                    const effect = layer.style.getPropertyValue('--motion-effect');
+                                    if (effect) {
+                                        layer.style.animation = 'none';
+                                        void layer.offsetWidth;
+                                        layer.style.animation = effect + ' .8s ease-out both';
+                                    }
+                                    layer.style.opacity = '1';
+                                } else if (!inView) {
+                                    triggered.delete(layer);
+                                    layer.classList.remove('trigger-active');
+                                    layer.style.opacity = '0';
+                                }
+                            });
+                        });
+                    }
+                    scaleAllSlides();
+                    window.addEventListener('scroll', runTriggers, { passive: true });
+                    window.addEventListener('resize', () => {
+                        scaleAllSlides();
+                        runTriggers();
+                    });
+                    runTriggers();
+                });
+                </script>
+            
+</body>
+</html>
