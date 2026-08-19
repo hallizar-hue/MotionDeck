@@ -14,7 +14,7 @@
     }
     body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex; overflow: hidden; font-size: 11px; }
     
-    #app { display: grid; grid-template-columns: 280px 1fr 340px; width: 100%; height: 100%; }
+    #app { display: grid; grid-template-columns: 250px 1fr 360px; width: 100%; height: 100%; }
     
     .col { display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
     .col-header { padding: 10px 12px; background: #333; font-weight: bold; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; height: 36px; flex-shrink: 0;}
@@ -28,11 +28,10 @@
     .section-item.active { border-color: var(--accent); background: #3a3a3a; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2); }
     .section-item:hover { background: #3a3a3a; }
     .section-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+    .section-meta { color: #777; font-size: 9px; margin-top: 4px; }
     
-    .scroll-effect-select { 
-        width: 100%; height: 24px; background: #222; border: 1px solid #444; 
-        color: var(--secondary); border-radius: 4px; font-size: 10px; margin-top: 4px;
-    }
+    .workflow-hint { padding: 9px 10px; color: #aaa; background: #222; border-bottom: 1px solid var(--border); line-height: 1.45; }
+    .workflow-hint strong { color: #eee; }
 
     /* --- CENTER: PREVIEW --- */
     #center-panel { background: #111; display: flex; flex-direction: column; position: relative; }
@@ -44,6 +43,7 @@
     .preview-resize-handle.right { top: 0; right: 0; width: 6px; height: 100%; cursor: ew-resize; }
     .preview-resize-handle.bottom { left: 0; bottom: 0; width: 100%; height: 6px; cursor: ns-resize; }
     #viewport-label { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 210; background: rgba(20,20,20,.88); color: #ddd; padding: 4px 8px; border-radius: 4px; font-size: 10px; pointer-events: none; white-space: nowrap; }
+    #zoom-label { color: #bbb; min-width: 38px; text-align: center; font-size: 10px; }
     #trigger-placement-hint { position: absolute; left: 12px; bottom: 12px; z-index: 210; max-width: 270px; padding: 7px 9px; color: #ddd; background: rgba(20,20,20,.9); border: 1px solid #555; border-radius: 5px; display: none; pointer-events: none; }
     
     #preview-scroll-container { 
@@ -103,6 +103,7 @@
         justify-content: space-between; align-items: center; transition: 0.2s;
     }
     .layer-item.selected { background: var(--accent); color: white; border-color: var(--accent); }
+    .layer-item.selected::before { content: ''; width: 3px; align-self: stretch; background: var(--layer-color, #fff); border-radius: 3px; margin-right: 7px; }
     .layer-item:hover { background: #3a3a3a; }
     .layer-info { display: flex; align-items: center; gap: 6px; overflow: hidden; }
     .layer-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -127,6 +128,11 @@
         display: flex; justify-content: space-between; align-items: center;
     }
     .effect-content { padding: 10px; }
+    .inspector-intro { padding: 10px 12px; background: #1b1b1b; border-bottom: 1px solid var(--border); }
+    .inspector-title { font-size: 12px; font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .inspector-subtitle { color: #888; font-size: 9px; margin-top: 4px; line-height: 1.4; }
+    .selection-empty { text-align: center; padding: 36px 18px; color: #777; line-height: 1.6; }
+    .selection-empty strong { color: #bbb; display: block; margin-bottom: 5px; }
     
     .custom-css-area { background: #222; padding: 10px; border: 1px solid #333; border-radius: 4px; margin-bottom: 10px; }
     .css-header { display: flex; justify-content: space-between; margin-bottom: 6px; align-items: center; font-size: 10px; color: #aaa; }
@@ -218,6 +224,8 @@
     }
     .motion-toggle input { width: auto; margin: 0; }
     .motion-toggle span { font-size: 10px; color: #ccc; }
+    .step-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 4px; color: #aaa; background: #222; font-size: 9px; }
+    .step-chip strong { color: #fff; }
   </style>
 </head>
 <body>
@@ -226,7 +234,7 @@
   <div id="empty-state">
       <div>
           <h2 style="color: #888; margin-bottom: 8px;">🎨 Presentation Builder</h2>
-          <p style="font-size: 11px; line-height: 1.5;">Выделите фреймы в Figma<br>Каждый фрейм станет секцией презентации</p>
+          <p style="font-size: 11px; line-height: 1.5;">Выделите фреймы в Figma<br>Затем выберите слой и добавьте ему анимацию</p>
       </div>
   </div>
   
@@ -235,9 +243,10 @@
     <!-- LEFT: SECTIONS -->
     <div class="col">
       <div class="col-header">
-          <span>СЕКЦИИ СТРАНИЦЫ</span>
+          <span>1. СЕКЦИИ</span>
           <span class="hint-text" id="section-count">0</span>
       </div>
+      <div class="workflow-hint"><strong>Начните здесь</strong><br>Выберите фрейм — он станет секцией презентации.</div>
       <div class="scroll-area" id="sections-list"></div>
 
       <div class="export-options" style="border-top: none;">
@@ -259,10 +268,13 @@
           </div>
       </div>
       <div id="playback-controls">
-        <button class="btn-icon" onclick="toggleScrollPreview()" title="Toggle Scroll Preview">📜</button>
-        <button class="btn-icon" onclick="resetPreview()" title="Reset View">↺</button>
-        <button class="btn-icon" onclick="addTriggerToLayer()" title="Add Trigger to Selected Layer">⚡</button>
-        <span id="info-text" style="color:#888; font-size: 10px; margin-left: 8px;">Скролл запускает триггеры | ⚡ Добавить и разместить</span>
+        <button class="btn-icon" onclick="toggleScrollPreview()" title="Включить режим проверки анимации">▶</button>
+        <button class="btn-icon" onclick="resetPreview()" title="Сбросить просмотр">↺</button>
+        <button class="btn-icon" onclick="zoomPreview(1.1)" title="Приблизить">＋</button>
+        <span id="zoom-label">100%</span>
+        <button class="btn-icon" onclick="zoomPreview(0.9)" title="Отдалить">－</button>
+        <button class="btn-icon" onclick="addTriggerToLayer()" title="Поставить триггер выбранного слоя">⚡</button>
+        <span id="info-text" style="color:#888; font-size: 10px; margin-left: 8px;">▶ Проверить | Alt + scroll — масштаб</span>
       </div>
       <div id="viewport-label">Viewport: —</div>
       <div id="trigger-placement-hint">Выберите место в макете — там будет срабатывать триггер выбранного слоя.</div>
@@ -270,15 +282,21 @@
 
     <!-- RIGHT: LAYERS & SETTINGS -->
     <div class="col">
-      <div class="col-header">СЛОИ</div>
+       <div class="col-header">
+         <span>2. СЛОЙ</span>
+         <span class="hint-text">Эффекты только для слоя</span>
+       </div>
       <div class="layer-legend" id="layer-legend"></div>
       <div class="scroll-area" id="layers-list" style="height: 40%; flex: 0 0 auto; border-bottom: 1px solid var(--border);"></div>
       
       <div class="col-header" style="background:#252525; border-top:1px solid var(--border);">
-        <span>НАСТРОЙКИ АНИМАЦИИ</span>
+         <span>3. АНИМАЦИЯ СЛОЯ</span>
         <span class="hint-text">Ctrl+C / Ctrl+V</span>
       </div>
-      
+       <div id="selected-layer-summary" class="inspector-intro">
+         <div class="inspector-title">Слой не выбран</div>
+         <div class="inspector-subtitle">Выберите слой выше, чтобы настроить его анимацию.</div>
+       </div>
       <div id="settings-scroll-area">
         <div id="timeline-editor">
             <!-- Layer Property Section -->
@@ -441,6 +459,8 @@
     let triggerPlacementMode = false;
     let previewViewportWidth = null;
     let previewViewportHeight = null;
+    let previewZoom = 1;
+    let previewFitScale = 1;
     const LAYER_COLORS = ['#f59e0b', '#22d3ee', '#a78bfa', '#34d399', '#fb7185', '#60a5fa', '#f472b6', '#facc15'];
 
     function layerColor(index) {
@@ -496,18 +516,12 @@
         framesData.forEach((frame, idx) => {
             const div = document.createElement('div');
             div.className = `section-item ${frame.id === activeFrameId ? 'active' : ''}`;
-            div.onclick = () => { activeFrameId = frame.id; renderUI(); };
-            
-            const settings = projectSettings[frame.id] || { scrollEffect: 'fadeInUp' };
+            div.onclick = () => { activeFrameId = frame.id; activeLayerId = null; previewZoom = 1; renderUI(); };
             
             div.innerHTML = `
                 <div style="overflow:hidden;">
                     <div class="section-name">${idx + 1}. ${frame.name}</div>
-                    <select class="scroll-effect-select" onchange="updateSectionEffect('${frame.id}', this.value)" onclick="event.stopPropagation()">
-                        ${Object.entries(SCROLL_EFFECTS).map(([k, v]) => 
-                            `<option value="${k}" ${settings.scrollEffect === k ? 'selected' : ''}>${v.name}</option>`
-                        ).join('')}
-                    </select>
+                    <div class="section-meta">${frame.width} × ${frame.height} px · ${frame.layers.length} слоёв</div>
                 </div>
             `;
             container.appendChild(div);
@@ -562,12 +576,17 @@
     }
 
     function renderSettings() {
+        const summary = document.getElementById('selected-layer-summary');
         if (!activeLayerId) {
+            summary.innerHTML = '<div class="inspector-title">Слой не выбран</div><div class="inspector-subtitle">Выберите слой выше, чтобы настроить его анимацию.</div>';
             document.getElementById('timeline-editor').innerHTML = '<div style="text-align:center; padding:40px; color:#666;">Выберите слой для настройки эффектов</div>';
             return;
         }
         
         const layerData = projectSettings[activeFrameId].layers[activeLayerId];
+        const frame = framesData.find(f => f.id === activeFrameId);
+        const layer = frame?.layers.find(item => item.id === activeLayerId);
+        summary.innerHTML = `<div class="inspector-title">Настройка: ${layer?.name || 'слой'}</div><div class="inspector-subtitle">Все изменения ниже применяются только к этому слою.</div>`;
         
         // Update layer property select
         document.getElementById('layer-property-select').value = layerData.layerProperty || '';
@@ -758,23 +777,23 @@
         const wrapper = document.getElementById('preview-stage-wrapper');
         const containerW = document.getElementById('preview-container').offsetWidth - 40;
         const containerH = document.getElementById('preview-container').offsetHeight - 80;
-        if (previewViewportWidth == null) previewViewportWidth = Math.min(f.width, Math.max(320, containerW));
+        if (previewViewportWidth == null) previewViewportWidth = f.width;
         previewViewportWidth = Math.max(240, Math.min(f.width * 1.5, previewViewportWidth));
         if (previewViewportHeight == null) previewViewportHeight = Math.min(f.height, Math.max(320, containerH));
-        const scale = previewViewportWidth < f.width
-            ? Math.min(1, containerH / Math.min(f.height, previewViewportHeight))
-            : Math.min(containerW / f.width, containerH / f.height, 1);
         const viewportHeight = Math.min(f.height, previewViewportHeight || f.height);
+        const scale = Math.min(containerW / previewViewportWidth, containerH / viewportHeight, 1);
+        previewFitScale = scale;
+        const displayScale = scale * previewZoom;
 
         wrapper.style.width = Math.max(120, previewViewportWidth * scale) + 'px';
         wrapper.style.height = Math.max(160, viewportHeight * scale) + 'px';
         stage.style.width = f.width + 'px';
         stage.style.height = f.height + 'px';
-        stage.style.transform = `scale(${scale})`;
+        stage.style.transform = `scale(${displayScale})`;
         stage.style.transformOrigin = '0 0';
-        stage.dataset.previewScale = scale;
+        stage.dataset.previewScale = displayScale;
         stage.style.backgroundColor = f.bgColor;
-        document.getElementById('viewport-label').textContent = `Viewport: ${Math.round(previewViewportWidth)} × ${Math.round(viewportHeight)} px`;
+        document.getElementById('viewport-label').textContent = `Viewport: ${Math.round(previewViewportWidth)} × ${Math.round(viewportHeight)} px · ${Math.round(previewZoom * 100)}%`;
         if (!wrapper.dataset.resizeBound) {
             wrapper.dataset.resizeBound = 'true';
             ['right', 'bottom'].forEach(direction => {
@@ -787,7 +806,18 @@
                 if (triggerPlacementMode && !event.target.closest('.preview-resize-handle, .trigger-marker')) placeActiveTriggerAt(event.clientY);
             });
             wrapper.addEventListener('scroll', handlePreviewScroll, { passive: true });
+            wrapper.addEventListener('wheel', (event) => {
+                if (!event.altKey) return;
+                event.preventDefault();
+                zoomPreview(event.deltaY < 0 ? 1.1 : 0.9);
+            }, { passive: false });
         }
+    }
+
+    function zoomPreview(multiplier) {
+        previewZoom = Math.max(0.5, Math.min(3, previewZoom * multiplier));
+        setupPreviewStage();
+        document.getElementById('zoom-label').textContent = `${Math.round(previewZoom * 100)}%`;
     }
 
     function startViewportResize(event, direction) {
