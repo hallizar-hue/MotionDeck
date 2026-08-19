@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Pro Sequencer 2.0</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gifshot/0.3.2/gifshot.min.js"></script>
+  <style>
+    :root { 
+      --bg: #1e1e1e; --panel: #2b2b2b; --text: #eee; --accent: #0d99ff; 
+      --border: #444; --danger: #ff4d4f; --success: #4caf50; --custom-text: #a5d6a7;
+      --warning: #ffb74d;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex; overflow: hidden; font-size: 11px; }
+    
+    #app { display: grid; grid-template-columns: 250px 1fr 320px; width: 100%; height: 100%; }
+    
+    .col { display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
+    .col-header { padding: 8px 10px; background: #333; font-weight: bold; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; height: 30px; flex-shrink: 0;}
+    .scroll-area { flex: 1; overflow-y: auto; padding: 10px; }
+
+    /* --- LEFT PANEL: FRAMES & GROUPS --- */
+    .group-container { margin-bottom: 15px; border: 1px solid #333; border-radius: 4px; overflow: hidden; }
+    .group-header { 
+        background: #252525; padding: 5px 8px; display: flex; justify-content: space-between; align-items: center; 
+        border-bottom: 1px solid #333;
+    }
+    .group-title { font-weight: bold; color: #bbb; display: flex; align-items: center; gap: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    
+    .loop-controls { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+    .loop-btn { 
+        background: #444; border: 1px solid #555; color: white; width: 24px; height: 20px; 
+        display: flex; justify-content: center; align-items: center; cursor: pointer; border-radius: 3px; font-size: 14px;
+    }
+    .loop-btn:hover { background: #555; }
+    .loop-btn.active { background: var(--accent); border-color: var(--accent); }
+    .loop-input { width: 40px; height: 20px; text-align: center; background: #333; border: 1px solid #555; color: white; border-radius: 3px; font-size: 11px; }
+
+    .frame-list { padding: 5px; }
+    .frame-item { 
+        background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 6px; margin-bottom: 4px; 
+        cursor: pointer; transition: 0.2s; display: flex; justify-content: space-between; align-items: center; 
+    }
+    .frame-item.active { border-color: var(--accent); background: #3a3a3a; }
+    .frame-item:hover { background: #3a3a3a; }
+    .duration-input { 
+        width: 45px; height: 20px; text-align: center; background: #222; border: 1px solid #444; 
+        color: var(--accent); border-radius: 3px; font-size: 10px; font-weight: bold;
+    }
+
+    /* --- CENTER: PREVIEW --- */
+    #center-panel { background: #111; display: flex; flex-direction: column; }
+    #preview-container { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+    #preview-stage-wrapper { background: white; box-shadow: 0 0 30px rgba(0,0,0,0.5); transition: transform 0.1s; }
+    #preview-stage { position: relative; overflow: hidden; }
+    .preview-layer { position: absolute; display: block; background-size: 100% 100%; background-repeat: no-repeat; }
+    #playback-controls { height: 40px; background: #222; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 10px; }
+
+    /* --- RIGHT: LAYERS & SETTINGS --- */
+    .layer-item { padding: 6px 8px; background: var(--panel); border: 1px solid var(--border); margin-bottom: 4px; border-radius: 4px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .layer-item.selected { background: var(--accent); color: white; border-color: var(--accent); }
+    .layer-info { display: flex; align-items: center; gap: 4px; }
+    
+    .badge { font-size: 9px; padding: 1px 3px; border-radius: 3px; font-weight: bold; }
+    .badge-svg { background: rgba(255, 183, 77, 0.2); color: var(--warning); border: 1px solid rgba(255, 183, 77, 0.4); }
+    .badge-steps { background: #555; color: #fff; border-radius: 10px; padding: 2px 6px; }
+    .badge-css { color: var(--custom-text); border: 1px solid var(--custom-text); }
+
+    #settings-scroll-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+    
+    #timeline-editor { padding: 10px; }
+    #steps-list { display: flex; flex-direction: column; gap: 8px; }
+    
+    .custom-css-area { background: #222; padding: 10px; border: 1px solid #333; border-radius: 4px; margin-bottom: 10px; }
+    .css-header { display: flex; justify-content: space-between; margin-bottom: 5px; align-items: center; }
+    textarea.code-input { width: 100%; height: 60px; background: #151515; border: 1px solid #444; color: var(--custom-text); font-family: monospace; font-size: 10px; padding: 5px; resize: vertical; box-sizing: border-box; }
+    textarea.code-input:focus { border-color: var(--accent); outline: none; }
+    .save-row { display: flex; gap: 5px; margin-top: 5px; }
+
+    .step-card { background: #333; border-left: 3px solid var(--accent); padding: 8px; border-radius: 0 4px 4px 0; position: relative; }
+    .step-row { display: flex; gap: 5px; margin-bottom: 4px; }
+    .step-label { font-size: 9px; color: #aaa; text-transform: uppercase; margin-bottom: 2px; }
+
+    /* Visual Timeline Bar */
+    .timeline-bar-container { height: 4px; background: #222; border-radius: 2px; margin-top: 6px; position: relative; overflow: hidden; }
+    .timeline-bar-fill { height: 100%; background: var(--accent); position: absolute; }
+    .timeline-bar-delay { height: 100%; background: rgba(255,255,255,0.1); position: absolute; }
+
+    input, select { background: #444; border: 1px solid #555; color: white; padding: 4px; border-radius: 3px; width: 100%; font-size: 10px; box-sizing: border-box; }
+    input:focus, select:focus { border-color: var(--accent); outline: none; }
+    button { cursor: pointer; border: none; border-radius: 3px; padding: 6px 10px; color: white; font-size: 10px; font-weight: bold; transition: 0.2s; }
+    .btn-primary { background: var(--accent); width: 100%; }
+    .btn-gif { background: #ff4d4f; width: 100%; margin-top: 5px; }
+    .btn-secondary { background: #333; border: 1px solid #444; color: #aaa; padding: 2px 6px; font-size: 9px;}
+    .btn-secondary:hover { color: #fff; border-color: #666; }
+    .btn-add { background: #333; border: 1px dashed #555; width: 100%; margin-top: 5px; color: #aaa; }
+    .btn-del { position: absolute; top: 2px; right: 2px; background: transparent; color: #666; padding: 2px 5px; font-size: 12px; }
+    
+    .export-options { padding: 10px; background: #252525; border-top: 1px solid var(--border); font-size: 10px; }
+    .checkbox-row { display: flex; align-items: center; gap: 5px; margin-bottom: 5px; cursor: pointer; }
+
+    #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--accent); color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    #toast.show { opacity: 1; }
+
+    .hidden { display: none !important; }
+    #empty-state { position: absolute; top:0; left:0; width:100%; height:100%; background: var(--bg); display:flex; justify-content:center; align-items:center; z-index:999; text-align:center; color:#666; }
+    
+    .export-platform-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+        padding: 10px; background: #252525; border-top: 1px solid var(--border);
+    }
+    .platform-label { display: flex; align-items: center; gap: 6px; font-size: 10px; cursor: pointer; }
+
+    .layer-click-toggle {
+        display: flex; align-items: center; gap: 4px; padding: 2px 6px;
+        border-radius: 4px; background: rgba(13, 153, 255, 0.1);
+        border: 1px solid rgba(13, 153, 255, 0.2); cursor: pointer;
+        margin-left: 5px;
+    }
+    .layer-click-toggle input { margin: 0; width: auto; }
+    .layer-click-toggle span { font-size: 9px; color: var(--accent); font-weight: bold; }
+
+    .hint-text { color: #666; font-size: 9px; margin-left: auto; }
+  </style>
+</head>
+<body>
+
+  <div id="toast">Copied!</div>
+  <div id="empty-state"><div><h2>Sequencer Pro 2.0</h2><p>Выделите фреймы в Figma для начала работы.</p></div></div>
+
+  <div id="app" class="hidden">
+    
+    <!-- LEFT: FRAMES -->
+    <div class="col">
+      <div class="col-header">СЦЕНЫ</div>
+      <div class="scroll-area" id="frames-list"></div>
+
+      <div class="export-platform-grid">
+        <div style="grid-column: 1 / -1; margin-bottom: 4px; opacity: 0.7;">Площадки для экспорта:</div>
+        <label class="platform-label"><input type="checkbox" id="p_google" checked> Google Ads</label>
+        <label class="platform-label"><input type="checkbox" id="p_yandex"> Yandex</label>
+        <label class="platform-label"><input type="checkbox" id="p_vk"> VK / myTarget</label>
+        <label class="platform-label"><input type="checkbox" id="p_adfox"> Adfox</label>
+        <label class="platform-label" style="grid-column: 1 / -1; margin-top: 5px;">
+            <input type="checkbox" id="p_custom" onchange="document.getElementById('custom_js_wrap').classList.toggle('hidden', !this.checked)"> 
+            Свой метод клика
+        </label>
+        
+        <!-- Настройка масштаба экспорта -->
+        <div style="grid-column: 1 / -1; margin-top: 10px; opacity: 0.7; font-size: 10px;">Масштаб экспорта:</div>
+        <label class="platform-label"><input type="radio" name="export_scale" value="1" id="scale_1x"> 1x</label>
+        <label class="platform-label"><input type="radio" name="export_scale" value="2" id="scale_2x" checked> 2x</label>
+        <label class="platform-label"><input type="radio" name="export_scale" value="3" id="scale_3x"> 3x</label>
+
+        <div id="custom_js_wrap" class="hidden" style="grid-column: 1 / -1;">
+            <textarea id="custom_js_input" class="code-input" style="height: 40px;" placeholder="window.open('#', '_blank')"></textarea>
+        </div>
+      </div>
+
+      <div class="export-options" style="border-top: none;">
+        <label class="checkbox-row">
+            <input type="checkbox" id="optimize-atlas" checked> 
+            <span>Smart Sprite (Атлас)</span>
+        </label>
+        <button onclick="exportBatch()" class="btn-primary" style="margin-top: 8px;">ЭКСПОРТ (ZIP)</button>
+        <button onclick="exportGIF()" class="btn-gif">ЭКСПОРТ (GIF)</button>
+      </div>
+    </div>
+
+    <!-- CENTER: PREVIEW -->
+    <div id="center-panel">
+      <div id="preview-container"><div id="preview-stage-wrapper"><div id="preview-stage"></div></div></div>
+      <div id="playback-controls">
+        <button onclick="playPreview()" style="background:#444">▶ Play</button>
+        <span id="total-time" style="color:#888; font-size: 10px;">0s</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: LAYERS & SETTINGS -->
+    <div class="col">
+      <div class="col-header">СЛОИ</div>
+      <div class="scroll-area" id="layers-list" style="height: 35%; flex: 0 0 auto; border-bottom: 1px solid var(--border);"></div>
+      
+      <div class="col-header" style="background:#252525; border-top:1px solid var(--border);">
+        <span>НАСТРОЙКИ СЛОЯ</span>
+        <span class="hint-text">Ctrl+C / Ctrl+V</span>
+      </div>
+      
+      <div id="settings-scroll-area">
+        <div id="timeline-editor">
+            <div id="steps-list"></div>
+            <div id="add-btn-area" style="margin-top:10px; display:none;">
+              <button class="btn-add" onclick="addStep()">+ Шаг анимации</button>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PLATFORM_CONFIGS = {
+        google: {
+            id: 'p_google', suffix: 'Google',
+            head: (w, h) => `<meta name="ad.size" content="width=${w},height=${h}"><script>var clickTag = "#";<\/script>`,
+            getClick: () => `window.open(window.clickTag || '#', '_blank')`
+        },
+        yandex: {
+            id: 'p_yandex', suffix: 'Yandex',
+            head: () => `<script src="https://yandex.st/ads/banner.js"><\/script>`,
+            getClick: (idx) => `window.open(yandexHTML5BannerApi.getClickURLNum(${idx}), '_blank')`
+        },
+        vk: {
+            id: 'p_vk', suffix: 'VK',
+            head: () => '',
+            getClick: (idx) => `var m=location.search.match(/link${idx}=([^&]+)/);window.open(m?decodeURIComponent(m[1]):'#','_blank')`
+        },
+        adfox: {
+            id: 'p_adfox', suffix: 'Adfox',
+            head: () => '',
+            getClick: () => `window.open('%banner_url%', '_blank')`
+        }
+    };
+
+    const STANDARD_PRESETS = {
+      'entrance': {
+        name: 'Появление',
+        items: {
+          'fadeIn': { name: 'Fade In', css: '@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }' },
+          'slideInLeft': { name: 'Slide In Left', css: '@keyframes slideInLeft { from { transform: translate3d(-100%,0,0); opacity: 0; } to { transform: translate3d(0,0,0); opacity: 1; } }' },
+          'slideInRight': { name: 'Slide In Right', css: '@keyframes slideInRight { from { transform: translate3d(100%,0,0); opacity: 0; } to { transform: translate3d(0,0,0); opacity: 1; } }' },
+          'slideInUp': { name: 'Slide In Up', css: '@keyframes slideInUp { from { transform: translate3d(0,100%,0); opacity: 0; } to { transform: translate3d(0,0,0); opacity: 1; } }' },
+          'slideInDown': { name: 'Slide In Down', css: '@keyframes slideInDown { from { transform: translate3d(0,-100%,0); opacity: 0; } to { transform: translate3d(0,0,0); opacity: 1; } }' },
+          'zoomIn': { name: 'Zoom In', css: '@keyframes zoomIn { from { opacity: 0; transform: scale(0.3); } 50% { opacity: 1; } to { opacity:1; transform: scale(1); } }' },
+        }
+      },
+      'exit': {
+        name: 'Уход',
+        items: {
+          'fadeOut': { name: 'Fade Out', css: '@keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }' },
+        }
+      },
+      'physics': {
+        name: 'Физика',
+        items: {
+          'bounceIn': { name: 'Bounce In', css: '@keyframes bounceIn { 0%{opacity:0;transform:scale(.3)} 50%{opacity:1;transform:scale(1.05)} 70%{transform:scale(.9)} 100%{transform:scale(1)} }' },
+          'elasticUp': { name: 'Elastic Up', css: '@keyframes elasticUp { 0%{opacity:0;transform:translate3d(0,100%,0)} 60%{opacity:1;transform:translate3d(0,-20px,0)} 75%{transform:translate3d(0,10px,0)} 90%{transform:translate3d(0,-5px,0)} 100%{transform:translate3d(0,0,0)} }' },
+        }
+      },
+      'attention': {
+        name: 'Внимание',
+        items: {
+          'pulse': { name: 'Pulse', css: '@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }' },
+          'flash': { name: 'Flash', css: '@keyframes flash { 0%,50%,100% { opacity: 1; } 25%,75% { opacity: 0; } }' },
+        }
+      },
+      'utility': {
+        name: 'Служебные',
+        items: {
+          'wait': { name: 'Wait (Пауза)', css: '' }
+        }
+      }
+    };
+
+    let framesData = []; 
+    let projectSettings = {}; 
+    let activeFrameId = null;
+    let activeLayerId = null; 
+    let groupSettings = {}; 
+    let clipboardSettings = null;
+
+    // --- HOTKEYS ---
+    window.addEventListener('keydown', (e) => {
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+        if (e.ctrlKey || e.metaKey) {
+            if (e.key === 'c' || e.key === 'C') { e.preventDefault(); copyLayerSettings(); }
+            if (e.key === 'v' || e.key === 'V') { e.preventDefault(); pasteLayerSettings(); }
+        }
+    });
+
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg; t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 1500);
+    }
+
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (msg.type === 'selection-data') {
+        if (!msg.valid) { 
+          document.getElementById('empty-state').classList.remove('hidden'); 
+          document.getElementById('app').classList.add('hidden'); 
+        } else { 
+          loadProject(msg.frames); 
+        }
+      } else if (msg.type === 'export-done') {
+        finalizeExport(msg.assets);
+      }
+    };
+
+    function loadProject(frames) {
+      framesData = frames;
+      document.getElementById('empty-state').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      
+      framesData.forEach(f => {
+        if (f.savedSettings) projectSettings[f.id] = f.savedSettings;
+        else if (!projectSettings[f.id]) projectSettings[f.id] = { duration: 3.0, layers: {} };
+        
+        f.layers.forEach(l => {
+          if (!projectSettings[f.id].layers[l.id]) {
+            projectSettings[f.id].layers[l.id] = { steps: [], customCss: "", isInteractive: false };
+          }
+        });
+      });
+
+      const groups = groupFramesByName(framesData);
+      Object.keys(groups).forEach(g => {
+          if (!groupSettings[g]) groupSettings[g] = { loops: 0 }; 
+      });
+
+      if (!activeFrameId || !framesData.find(f => f.id === activeFrameId)) {
+        activeFrameId = framesData[0].id;
+      }
+      
+      renderUI();
+      playPreview();
+    }
+
+    function renderUI() {
+      renderFramesList();
+      renderLayersList();
+      renderTimeline();
+      setupPreviewStage();
+    }
+
+    function groupFramesByName(frames) {
+      const groups = {};
+      frames.forEach(frame => {
+        const regex = /^(.*)([-_ ]+)(\d+)$/;
+        const match = frame.name.match(regex);
+        let groupName = match ? match[1].trim() : frame.name;
+        if (!groups[groupName]) groups[groupName] = [];
+        groups[groupName].push(frame);
+      });
+      return groups;
+    }
+
+    function renderFramesList() {
+      const container = document.getElementById('frames-list'); container.innerHTML = '';
+      const groups = groupFramesByName(framesData);
+      
+      Object.keys(groups).forEach(gName => {
+        const loops = groupSettings[gName]?.loops || 0;
+        const isInf = loops === 0;
+        const grp = document.createElement('div'); grp.className = 'group-container';
+        
+        grp.innerHTML = `
+            <div class="group-header">
+                <div class="group-title" title="${gName}">📂 ${gName}</div>
+                <div class="loop-controls">
+                    <div class="loop-btn ${isInf ? 'active' : ''}" onclick="toggleLoop('${gName}')" title="${isInf ? 'Бесконечно' : 'Кол-во повторов'}">${isInf ? '∞' : '#'}</div>
+                    ${!isInf ? `<input type="number" class="loop-input" value="${loops}" min="1" onchange="updateLoopCount('${gName}', this.value)">` : ''}
+                </div>
+            </div>`;
+            
+        const list = document.createElement('div'); list.className = 'frame-list';
+        groups[gName].forEach((f, idx) => {
+            const el = document.createElement('div'); el.className = `frame-item ${f.id === activeFrameId ? 'active' : ''}`;
+            el.onclick = (e) => { 
+                if(e.target.tagName !== 'INPUT') { 
+                    activeFrameId = f.id; activeLayerId = null; renderUI(); playPreview(); 
+                } 
+            };
+            
+            const durInput = document.createElement('input');
+            durInput.type = 'number';
+            durInput.step = '0.1';
+            durInput.className = 'duration-input';
+            durInput.value = projectSettings[f.id].duration;
+            durInput.onchange = (e) => updateFrameDuration(f.id, e.target.value);
+            durInput.onwheel = (e) => {
+                e.preventDefault();
+                const delta = e.deltaY < 0 ? 0.1 : -0.1;
+                const newVal = Math.max(0.1, parseFloat(durInput.value) + delta);
+                durInput.value = newVal.toFixed(1);
+                updateFrameDuration(f.id, durInput.value);
+            };
+
+            const label = document.createElement('span');
+            label.textContent = `${idx+1}. ${f.name.replace(gName, '').replace(/[-_ ]+/, '') || 'Frame'}`;
+            
+            el.appendChild(label);
+            el.appendChild(durInput);
+            list.appendChild(el);
+        });
+        grp.appendChild(list); container.appendChild(grp);
+      });
+    }
+
+    function renderLayersList() {
+      const container = document.getElementById('layers-list'); container.innerHTML = '';
+      const frame = framesData.find(f => f.id === activeFrameId); if (!frame) return;
+      [...frame.layers].reverse().forEach(layer => {
+        const el = document.createElement('div'); el.className = `layer-item ${layer.id === activeLayerId ? 'selected' : ''}`;
+        el.onclick = () => { activeLayerId = layer.id; renderUI(); };
+        const layerData = projectSettings[activeFrameId].layers[layer.id];
+        
+        el.innerHTML = `
+          <div class="layer-info">
+            <span>${layer.name}</span>
+            ${layer.exportFormat === 'SVG' ? '<span class="badge badge-svg">SVG</span>' : ''}
+            ${layerData.steps.length > 0 ? `<span class="badge badge-steps">${layerData.steps.length}</span>` : ''}
+          </div>
+          <label class="layer-click-toggle" onclick="event.stopPropagation()">
+            <input type="checkbox" ${layerData.isInteractive ? 'checked' : ''} onchange="toggleLayerClick('${layer.id}', this.checked)">
+            <span>CLICK</span>
+          </label>
+        `;
+        container.appendChild(el);
+      });
+    }
+
+    function renderTimeline() {
+      const container = document.getElementById('steps-list'); 
+      const addBtn = document.getElementById('add-btn-area'); 
+      container.innerHTML = '';
+      
+      if (!activeLayerId) { 
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:#666;">Выберите слой для настройки анимации</div>'; 
+        addBtn.style.display = 'none'; 
+        return; 
+      }
+      
+      addBtn.style.display = 'block';
+      const frameDuration = projectSettings[activeFrameId].duration;
+      const layerData = projectSettings[activeFrameId].layers[activeLayerId];
+      
+      const customDiv = document.createElement('div'); customDiv.className = 'custom-css-area';
+      customDiv.innerHTML = `<div class="css-header"><span>Custom CSS (& = this):</span></div><textarea class="code-input" id="custom-css-input" placeholder="/* CSS код */" onchange="updateCustomCss(this.value)">${layerData.customCss || ''}</textarea>`;
+      container.appendChild(customDiv);
+
+      layerData.steps.forEach((step, index) => {
+        const div = document.createElement('div'); div.className = 'step-card';
+        let options = '';
+        Object.keys(STANDARD_PRESETS).forEach(gk => {
+          const g = STANDARD_PRESETS[gk];
+          options += `<optgroup label="${g.name}">`;
+          Object.keys(g.items).forEach(k => {
+            options += `<option value="${k}" ${step.type === k ? 'selected' : ''}>${g.items[k].name}</option>`;
+          });
+          options += `</optgroup>`;
+        });
+
+        const delayPercent = (step.delay / frameDuration) * 100;
+        const durationPercent = (step.duration / frameDuration) * 100;
+
+        div.innerHTML = `
+          <button class="btn-del" onclick="removeStep(${index})">×</button>
+          <div class="step-row">
+            <div style="flex:1"><div class="step-label">Тип</div><select onchange="updateStep(${index}, 'type', this.value)">${options}</select></div>
+            <div style="flex:1"><div class="step-label">Easing</div><select onchange="updateStep(${index}, 'easing', this.value)">
+              <option value="linear" ${step.easing === 'linear' ? 'selected' : ''}>linear</option>
+              <option value="ease" ${step.easing === 'ease' ? 'selected' : ''}>ease</option>
+              <option value="ease-in" ${step.easing === 'ease-in' ? 'selected' : ''}>ease-in</option>
+              <option value="ease-out" ${step.easing === 'ease-out' ? 'selected' : ''}>ease-out</option>
+              <option value="ease-in-out" ${step.easing === 'ease-in-out' ? 'selected' : ''}>ease-in-out</option>
+            </select></div>
+          </div>
+          <div class="step-row">
+            <div style="flex:1"><div class="step-label">Длит.</div><input type="number" step="0.1" value="${step.duration}" onchange="updateStep(${index}, 'duration', this.value)"></div>
+            <div style="flex:1"><div class="step-label">Задержка</div><input type="number" step="0.1" value="${step.delay}" onchange="updateStep(${index}, 'delay', this.value)"></div>
+          </div>
+          <div class="timeline-bar-container">
+            <div class="timeline-bar-delay" style="left: 0; width: ${delayPercent}%"></div>
+            <div class="timeline-bar-fill" style="left: ${delayPercent}%; width: ${durationPercent}%"></div>
+          </div>`;
+        container.appendChild(div);
+      });
+    }
+
+    function updateFrameDuration(id, val) { 
+        projectSettings[id].duration = Math.max(0.1, parseFloat(val) || 0.1); 
+        saveSettings(id); 
+        renderFramesList(); 
+        renderTimeline();
+        playPreview(); 
+    }
+    
+    function toggleLayerClick(id, val) { projectSettings[activeFrameId].layers[id].isInteractive = val; saveSettings(activeFrameId); }
+    
+    function addStep() { 
+        projectSettings[activeFrameId].layers[activeLayerId].steps.push({ type: 'fadeIn', duration: 1.0, delay: 0, easing: 'ease-out' }); 
+        saveSettings(activeFrameId); renderTimeline(); playPreview(); 
+    }
+    
+    function removeStep(idx) { 
+        projectSettings[activeFrameId].layers[activeLayerId].steps.splice(idx, 1); 
+        saveSettings(activeFrameId); renderTimeline(); playPreview(); 
+    }
+    
+    function updateStep(idx, k, v) { 
+        projectSettings[activeFrameId].layers[activeLayerId].steps[idx][k] = (k==='duration'||k==='delay')?parseFloat(v):v; 
+        saveSettings(activeFrameId); renderTimeline(); playPreview(); 
+    }
+
+    function updateCustomCss(val) { 
+        projectSettings[activeFrameId].layers[activeLayerId].customCss = val; 
+        saveSettings(activeFrameId); renderLayersList(); playPreview(); 
+    }
+    
+    function toggleLoop(gName) { groupSettings[gName].loops = (groupSettings[gName].loops === 0) ? 1 : 0; renderFramesList(); }
+    function updateLoopCount(gName, val) { groupSettings[gName].loops = parseInt(val) || 1; }
+    
+    function saveSettings(id) { parent.postMessage({ pluginMessage: { type: 'save-settings', frameId: id, settings: projectSettings[id] } }, '*'); }
+
+    function getActiveGroup() {
+        if(!activeFrameId) return [];
+        const groups = groupFramesByName(framesData);
+        for (const gName in groups) if (groups[gName].find(f => f.id === activeFrameId)) return groups[gName];
+        return [];
+    }
+
+    // --- COPY/PASTE ---
+    function copyLayerSettings() {
+        if (!activeLayerId || !activeFrameId) return;
+        const data = projectSettings[activeFrameId].layers[activeLayerId];
+        clipboardSettings = JSON.parse(JSON.stringify(data));
+        showToast("Settings Copied");
+    }
+    
+    function pasteLayerSettings() {
+        if (!activeLayerId || !activeFrameId) return showToast("Select layer");
+        if (!clipboardSettings) return showToast("Buffer empty");
+        projectSettings[activeFrameId].layers[activeLayerId].steps = JSON.parse(JSON.stringify(clipboardSettings.steps));
+        projectSettings[activeFrameId].layers[activeLayerId].customCss = clipboardSettings.customCss;
+        saveSettings(activeFrameId); renderTimeline(); renderLayersList(); playPreview(); showToast("Settings Pasted");
+    }
+
+    function generateLayerCSS(layerId, steps, customCss, globalTimeOffset, isExport, layerClassOrId) {
+        let cssProps = "";
+        if (steps.length > 0) {
+            let names=[], durs=[], dels=[], eases=[], fills=[]; let localTime = 0;
+            steps.forEach(step => {
+                if(step.type === 'wait') { localTime += (step.delay + step.duration); return; }
+                const totalDelay = globalTimeOffset + localTime + step.delay;
+                names.push(step.type); durs.push(`${step.duration}s`); dels.push(`${totalDelay}s`); eases.push(step.easing); fills.push('both');
+                localTime += (step.delay + step.duration);
+            });
+            if(names.length) cssProps += `animation-name: ${names.join(', ')}; animation-duration: ${durs.join(', ')}; animation-delay: ${dels.join(', ')}; animation-timing-function: ${eases.join(', ')}; animation-fill-mode: ${fills.join(', ')}; `;
+        }
+        let complexCSS = "";
+        if (customCss && customCss.trim().length > 0) {
+            if (customCss.includes('mask-image')) {
+                // AUTO-FIX for Sprite Masks
+                cssProps += `-webkit-mask-size: var(--bg-size, 100% 100%); mask-size: var(--bg-size, 100% 100%); -webkit-mask-position: var(--bg-pos, 0 0); mask-position: var(--bg-pos, 0 0); -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; `;
+            }
+            if (customCss.includes('&') || customCss.includes('{')) {
+                const selector = isExport ? `.${layerClassOrId}` : `#${layerClassOrId}`; 
+                complexCSS = customCss.replaceAll('&', selector);
+            } else cssProps += customCss;
+        }
+        return { cssProps, complexCSS };
+    }
+
+    function normalizeBytes(bytes) { if (bytes instanceof Uint8Array) return bytes; return new Uint8Array(Object.values(bytes)); }
+
+    function setupPreviewStage() {
+      const f = framesData.find(f => f.id === activeFrameId); if (!f) return;
+      const stage = document.getElementById('preview-stage');
+      const wrapper = document.getElementById('preview-stage-wrapper');
+      const containerW = document.getElementById('preview-container').offsetWidth - 40;
+      const containerH = document.getElementById('preview-container').offsetHeight - 40;
+      const scale = Math.min(containerW / f.width, containerH / f.height, 1);
+      
+      wrapper.style.width = (f.width * scale) + 'px'; wrapper.style.height = (f.height * scale) + 'px';
+      stage.style.width = f.width + 'px'; stage.style.height = f.height + 'px';
+      stage.style.transform = `scale(${scale})`; stage.style.transformOrigin = '0 0';
+      stage.style.backgroundColor = f.bgColor;
+    }
+
+    function playPreview() {
+        const stage = document.getElementById('preview-stage'); stage.innerHTML = '';
+        let style = document.getElementById('preview-css'); if (style) style.remove();
+        style = document.createElement('style'); style.id = 'preview-css'; 
+        
+        let globalCSS = "";
+        Object.values(STANDARD_PRESETS).forEach(g => Object.values(g.items).forEach(p => {
+            if(p.css) globalCSS += p.css + "\n";
+        }));
+        style.textContent = globalCSS;
+        document.head.appendChild(style);
+        
+        const group = getActiveGroup(); let globalTimeOffset = 0; let dynamicStyles = "";
+        
+        group.forEach((frame, fIdx) => {
+            const settings = projectSettings[frame.id];
+            const sceneDiv = document.createElement('div');
+            Object.assign(sceneDiv.style, { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: frame.bgColor, opacity: '0', animation: `fadeIn 0s ${globalTimeOffset}s forwards`, zIndex: fIdx });
+            stage.appendChild(sceneDiv);
+            
+            frame.layers.forEach((layer, lIdx) => {
+                const layerData = settings.layers[layer.id];
+                const blob = new Blob([normalizeBytes(layer.previewBytes)], { type: 'image/png' }); 
+                const domId = `prev_L_${fIdx}_${lIdx}`;
+                const div = document.createElement('div'); div.id = domId; div.className = 'preview-layer';
+                Object.assign(div.style, { left: layer.x + 'px', top: layer.y + 'px', width: layer.width + 'px', height: layer.height + 'px', backgroundImage: `url(${URL.createObjectURL(blob)})`, backgroundSize: '100% 100%' });
+                
+                const { cssProps, complexCSS } = generateLayerCSS(layer.id, layerData.steps, layerData.customCss, globalTimeOffset, false, domId);
+                div.style.cssText += cssProps; if (complexCSS) dynamicStyles += complexCSS + "\n";
+                sceneDiv.appendChild(div);
+            });
+            globalTimeOffset += settings.duration;
+        });
+        style.textContent += "\n" + dynamicStyles;
+        document.getElementById('total-time').textContent = `Group: ${globalTimeOffset.toFixed(1)}s`;
+    }
+
+    async function exportGIF() {
+      const frame = framesData.find(f => f.id === activeFrameId);
+      const settings = projectSettings[frame.id];
+      const btn = document.querySelector('.btn-gif'); btn.textContent = "Encoding GIF...";
+      
+      const fps = 15;
+      const totalFrames = Math.ceil(settings.duration * fps);
+      const images = [];
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = frame.width; canvas.height = frame.height;
+      const ctx = canvas.getContext('2d');
+
+      const layerImages = await Promise.all(frame.layers.map(l => new Promise(resolve => {
+        const img = new Image();
+        const bytes = l.previewBytes instanceof Uint8Array ? l.previewBytes : new Uint8Array(Object.values(l.previewBytes));
+        const blob = new Blob([bytes], { type: 'image/png' });
+        img.onload = () => resolve({ img, x: l.x, y: l.y, w: l.width, h: l.height, steps: settings.layers[l.id].steps });
+        img.src = URL.createObjectURL(blob);
+      })));
+
+      for (let i = 0; i < totalFrames; i++) {
+        const time = i / fps;
+        ctx.fillStyle = frame.bgColor; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        layerImages.forEach(l => {
+          let opacity = 1; let tx = 0; let ty = 0; let scale = 1;
+          let localTime = 0;
+          
+          l.steps.forEach(s => {
+            const start = s.delay; const end = start + s.duration;
+            if (time >= start) {
+              const progress = Math.min(1, (time - start) / s.duration);
+              if (s.type === 'fadeIn') opacity = progress;
+              if (s.type === 'slideInLeft') tx = -l.w * (1 - progress);
+              if (s.type === 'slideInRight') tx = l.w * (1 - progress);
+              if (s.type === 'slideInUp') ty = l.h * (1 - progress);
+              if (s.type === 'slideInDown') ty = -l.h * (1 - progress);
+              if (s.type === 'zoomIn') scale = 0.3 + (0.7 * progress);
+              if (s.type === 'fadeOut') opacity = 1 - progress;
+              if (s.type === 'pulse') scale = 1 + (Math.sin(progress * Math.PI) * 0.05);
+            } else if (s.type === 'fadeIn' || s.type.startsWith('slideIn') || s.type === 'zoomIn') {
+                opacity = 0;
+            }
+          });
+
+          ctx.save(); ctx.globalAlpha = opacity;
+          ctx.translate(l.x + tx + l.w/2, l.y + ty + l.h/2); ctx.scale(scale, scale);
+          ctx.drawImage(l.img, -l.w/2, -l.h/2, l.w, l.h); ctx.restore();
+        });
+        images.push(canvas.toDataURL('image/png'));
+      }
+
+      gifshot.createGIF({ images, interval: 1/fps, gifWidth: frame.width, gifHeight: frame.height }, (obj) => {
+        if (!obj.error) {
+          const link = document.createElement('a'); link.href = obj.image; link.download = `${frame.name}.gif`; link.click();
+        }
+        btn.textContent = "ЭКСПОРТ (GIF)";
+      });
+    }
+
+    function exportBatch() {
+      document.querySelector('button[onclick="exportBatch()"]').textContent = "Выгрузить ещё";
+      const scale = document.getElementById('scale_1x').checked ? 1 : document.getElementById('scale_2x').checked ? 2 : 3;
+      parent.postMessage({ pluginMessage: { type: 'export-request', frames: framesData, exportScale: scale } }, '*');
+    }
+
+    async function generateSpriteSheet(imagesData, scale = 1) {
+        if (imagesData.length === 0) return null;
+        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
+        let totalHeight = 0; const loadedImages = []; const maxWidth = Math.max(...imagesData.map(item => item.width * scale));
+
+        const loadPromises = imagesData.map(item => new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => { loadedImages.push({ img, item }); totalHeight += Math.round(item.height * scale) + 1; resolve(); };
+            img.src = URL.createObjectURL(item.blob);
+        }));
+        await Promise.all(loadPromises);
+
+        canvas.width = maxWidth; canvas.height = totalHeight;
+        const spriteMap = {}; let currentY = 0;
+        
+        loadedImages.forEach(({ img, item }) => {
+            const w = Math.round(item.width * scale);
+            const h = Math.round(item.height * scale);
+            ctx.drawImage(img, 0, currentY, w, h);
+            spriteMap[item.layerClass] = { x: 0, y: currentY, w: w, h: h };
+            currentY += h + 1;
+        });
+        
+        return { spriteBlob: await new Promise(r => canvas.toBlob(r, 'image/png')), spriteMap, width: maxWidth, height: totalHeight };
+    }
+
+    async function finalizeExport(assets) {
+      try {
+        const zip = new JSZip();
+        const groups = groupFramesByName(framesData);
+        
+        let globalCSS = "";
+        Object.values(STANDARD_PRESETS).forEach(g => Object.values(g.items).forEach(p => {
+            if(p.css) globalCSS += p.css + "\n";
+        }));
+        
+        const optimize = document.getElementById('optimize-atlas').checked;
+        const activePlatforms = Object.values(PLATFORM_CONFIGS).filter(p => document.getElementById(p.id).checked);
+        const scale = document.getElementById('scale_1x').checked ? 1 : document.getElementById('scale_2x').checked ? 2 : 3;
+
+        for (const [groupName, groupFrames] of Object.entries(groups)) {
+            let baseCssContent = '';
+            let globalTimeOffset = 0;
+            const width = groupFrames[0].width;
+            const height = groupFrames[0].height;
+            
+            const layersForSprite = []; 
+            const frameLayersData = [];
+
+            for (let i = 0; i < groupFrames.length; i++) {
+                const frame = groupFrames[i];
+                const settings = projectSettings[frame.id];
+                const sceneId = `scene_${i}`;
+                
+                baseCssContent += `#${sceneId} { position: absolute; top:0; left:0; width:100%; height:100%; background: ${frame.bgColor}; opacity: 0; animation: fadeIn 0s ${globalTimeOffset}s forwards; z-index: ${i * 10}; }\n`;
+
+                const sceneLayers = [];
+                for (let j = 0; j < frame.layers.length; j++) {
+                    const layer = frame.layers[j];
+                    const layerData = settings.layers[layer.id];
+                    const layerClass = `L_${i}_${j}`;
+                    const assetObj = assets[layer.id];
+                    
+                    if (!assetObj) continue;
+
+                    const blob = new Blob([normalizeBytes(assetObj.data)], { type: assetObj.mime });
+                    const isSvg = assetObj.ext === 'svg';
+                    const hasCustomCss = layerData.customCss && layerData.customCss.trim().length > 0;
+
+                    if (optimize && !hasCustomCss && !isSvg) {
+                        layersForSprite.push({ blob, width: layer.width, height: layer.height, layerClass });
+                    } else {
+                        const fileName = `${groupName}_img_${i}_${j}.${assetObj.ext}`;
+                        zip.file(`${groupName}/${fileName}`, blob);
+                        
+                        baseCssContent += `.${layerClass} { 
+                            background-image: url('${fileName}'); 
+                            background-size: 100% 100% !important; 
+                            background-repeat: no-repeat; 
+                        }\n`;
+
+                        if (!isSvg) {
+                            baseCssContent += `.${layerClass} { image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; }\n`;
+                        }
+                    }
+
+                    const { cssProps, complexCSS } = generateLayerCSS(layer.id, layerData.steps, layerData.customCss, globalTimeOffset, true, layerClass);
+                    baseCssContent += `.${layerClass} { position: absolute; left: ${layer.x}px; top: ${layer.y}px; width: ${layer.width}px; height: ${layer.height}px; ${cssProps} }\n${complexCSS}\n`;
+
+                    sceneLayers.push({
+                        layerClass,
+                        isInteractive: layerData.isInteractive
+                    });
+                }
+                frameLayersData.push({ id: sceneId, layers: sceneLayers });
+                globalTimeOffset += settings.duration;
+            }
+
+            if (optimize && layersForSprite.length > 0) {
+                const spriteResult = await generateSpriteSheet(layersForSprite, scale);
+                if (spriteResult) {
+                    const { spriteBlob, spriteMap, width: spriteW, height: spriteH } = spriteResult;
+                    const spriteFileName = `${groupName}_atlas.png`;
+                    zip.file(`${groupName}/${spriteFileName}`, spriteBlob);
+
+                    let spriteCss = '';
+                    layersForSprite.forEach(item => {
+                        const pos = spriteMap[item.layerClass];
+                        // Корректируем размеры и позицию с учетом масштаба экспорта
+                        const cssSpriteW = spriteW / scale;
+                        const cssSpriteH = spriteH / scale;
+                        const cssPosY = pos.y / scale;
+                        
+                        spriteCss += `
+                            .${item.layerClass} {
+                                background-image: url('${spriteFileName}');
+                                background-position: 0 -${cssPosY}px;
+                                background-size: ${cssSpriteW}px ${cssSpriteH}px !important;
+                                background-repeat: no-repeat;
+                                --bg-pos: 0 -${cssPosY}px;
+                                --bg-size: ${cssSpriteW}px ${cssSpriteH}px;
+                                image-rendering: -webkit-optimize-contrast;
+                                image-rendering: crisp-edges;
+                            }
+                        `;
+                    });
+                    baseCssContent += spriteCss;
+                }
+            }
+
+            const loops = groupSettings[groupName]?.loops || 0;
+            const loopScript = `
+                var loopCount = 0; 
+                var maxLoops = ${loops}; 
+                var totalDuration = ${globalTimeOffset * 1000};
+                
+                function replay() {
+                    const banner = document.querySelector('.banner');
+                    const content = banner.innerHTML;
+                    banner.innerHTML = '';
+                    void banner.offsetWidth; 
+                    banner.innerHTML = content;
+                }
+                
+                function checkLoop() {
+                    loopCount++;
+                    if (maxLoops === 0 || loopCount < maxLoops) { 
+                        replay(); 
+                        setTimeout(checkLoop, totalDuration); 
+                    }
+                }
+                
+                if (maxLoops === 0 || maxLoops > 1) { 
+                    setTimeout(checkLoop, totalDuration); 
+                }
+            `;
+
+            for (const platform of activePlatforms) {
+                let htmlContent = '';
+                let linkIndex = 0;
+                
+                for (const frameData of frameLayersData) {
+                    let inner = '';
+                    for (const layer of frameData.layers) {
+                        let clickAttr = '';
+                        if (layer.isInteractive) {
+                            linkIndex++;
+                            clickAttr = `onclick="${platform.getClick(linkIndex)}" style="cursor:pointer;"`;
+                        }
+                        inner += `<div class="${layer.layerClass}" ${clickAttr}></div>`;
+                    }
+                    htmlContent += `<div id="${frameData.id}">${inner}</div>`;
+                }
+                
+                const hasInteractive = linkIndex > 0;
+                const bannerClick = !hasInteractive ? `onclick="${platform.getClick(1)}"` : '';
+                const cursorStyle = !hasInteractive ? 'cursor:pointer;' : '';
+
+                const finalHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+${platform.head(width, height)}
+<title>${groupName}</title>
+<style>
+body{margin:0;padding:0;height:100vh;display:flex;justify-content:center;align-items:center;background:#333}
+.banner{position:relative;width:${width}px;height:${height}px;background:#fff;overflow:hidden;${cursorStyle}}
+${globalCSS}
+${baseCssContent}
+</style>
+</head>
+<body>
+<div class="banner" ${bannerClick}>${htmlContent}</div>
+<script>${loopScript}<\/script>
+</body>
+</html>`;
+
+                const fileName = activePlatforms.length > 1 ? `${groupName}_${platform.suffix}.html` : `${groupName}.html`;
+                zip.file(`${groupName}/${fileName}`, finalHtml);
+            }
+        }
+
+        const content = await zip.generateAsync({ type: "blob" });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(content);
+        link.download = optimize ? "Optimized_Banners.zip" : "HTML5_Banners.zip";
+        link.click();
+
+      } catch (e) {
+        alert("Ошибка экспорта: " + e.message);
+        console.error(e);
+      }
+    }
+  </script>
+</body>
+</html>
