@@ -1,5 +1,5 @@
-console.log("Sequencer Backend Running");
-figma.showUI(__html__, { width: 1000, height: 800 });
+console.log("Presentation Builder Running");
+figma.showUI(__html__, { width: 1200, height: 850 });
 
 // Хелпер для получения цвета фона фрейма
 function getBackgroundColor(node) {
@@ -24,7 +24,7 @@ async function processFrames() {
     return;
   }
 
-  // Сортировка фреймов по имени (1, 2, 3...)
+  // Сортировка фреймов по имени (1, 2, 3...) - это будут секции страницы
   selection.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
   const framesData = [];
@@ -34,7 +34,7 @@ async function processFrames() {
     const children = frame.children;
 
     // Загружаем сохраненные настройки анимации, если есть
-    const savedDataString = frame.getPluginData('sequencer-data');
+    const savedDataString = frame.getPluginData('presentation-data');
     let savedSettings = null;
     if (savedDataString) {
       try { savedSettings = JSON.parse(savedDataString); } catch (e) {}
@@ -84,7 +84,7 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === "save-settings") {
     const frame = await figma.getNodeByIdAsync(msg.frameId);
     if (frame) {
-        frame.setPluginData('sequencer-data', JSON.stringify(msg.settings));
+        frame.setPluginData('presentation-data', JSON.stringify(msg.settings));
     }
   }
   else if (msg.type === "load-library") {
