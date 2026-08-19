@@ -299,6 +299,7 @@
        </div>
       <div id="settings-scroll-area">
         <div id="timeline-editor">
+            <div id="layer-settings-form">
             <!-- Layer Property Section -->
             <div class="effect-section">
                 <div class="effect-header">
@@ -327,16 +328,12 @@
                         <input type="checkbox" id="enable-trigger" onchange="toggleTriggerEnabled()">
                         <span>Включить триггер</span>
                     </div>
-                    <div style="font-size: 9px; color: #888; margin-bottom: 8px;">
-                        Триггер срабатывает когда слой появляется в области просмотра
+                    <div style="font-size: 9px; color: #888; margin-bottom: 8px; line-height:1.45;">
+                        Анимация запускается, когда эта точка макета входит в viewport.
+                        Нажмите кнопку и кликните нужное место в превью.
                     </div>
-                    <div class="step-row">
-                        <div style="flex:1;">
-                            <div class="step-label">Позиция триггера (%)</div>
-                            <input type="range" id="trigger-position" min="0" max="100" value="50" onchange="updateTriggerPosition(this.value)">
-                            <div style="text-align:center; font-size:9px; color:#888;" id="trigger-position-value">50%</div>
-                        </div>
-                    </div>
+                    <div class="step-chip">Точка запуска: <strong id="trigger-coordinate-value">—</strong></div>
+                    <button class="btn-add" onclick="addTriggerToLayer()">⚡ Поставить или изменить точку</button>
                 </div>
             </div>
             
@@ -395,6 +392,7 @@
             
             <div id="add-btn-area" style="display:none;">
               <button class="btn-add" onclick="addStep()">+ Добавить шаг</button>
+            </div>
             </div>
         </div>
       </div>
@@ -577,9 +575,10 @@
 
     function renderSettings() {
         const summary = document.getElementById('selected-layer-summary');
+        const form = document.getElementById('layer-settings-form');
         if (!activeLayerId) {
             summary.innerHTML = '<div class="inspector-title">Слой не выбран</div><div class="inspector-subtitle">Выберите слой выше, чтобы настроить его анимацию.</div>';
-            document.getElementById('timeline-editor').innerHTML = '<div style="text-align:center; padding:40px; color:#666;">Выберите слой для настройки эффектов</div>';
+            form.classList.add('hidden');
             return;
         }
         
@@ -587,14 +586,15 @@
         const frame = framesData.find(f => f.id === activeFrameId);
         const layer = frame?.layers.find(item => item.id === activeLayerId);
         summary.innerHTML = `<div class="inspector-title">Настройка: ${layer?.name || 'слой'}</div><div class="inspector-subtitle">Все изменения ниже применяются только к этому слою.</div>`;
+        form.classList.remove('hidden');
         
         // Update layer property select
         document.getElementById('layer-property-select').value = layerData.layerProperty || '';
         
         // Update trigger settings
         document.getElementById('enable-trigger').checked = layerData.triggerEnabled || false;
-        document.getElementById('trigger-position').value = layerData.triggerPosition || 50;
-        document.getElementById('trigger-position-value').textContent = (layerData.triggerPosition || 50) + '%';
+        const triggerCoordinate = document.getElementById('trigger-coordinate-value');
+        if (triggerCoordinate) triggerCoordinate.textContent = layerData.triggerEnabled && layerData.triggerY != null ? `${layerData.triggerY}px` : 'не задана';
         
         // Update effect buttons state
         document.querySelectorAll('#motion-effects-grid .effect-btn').forEach(btn => {
@@ -902,10 +902,22 @@
             }
             
             div.style.cssText = `left: ${layer.x}px; top: ${layer.y}px; width: ${layer.width}px; height: ${layer.height}px; background-image: url(${URL.createObjectURL(blob)}); background-size: 100% 100%;`;
+            div.onclick = (event) => {
+                event.stopPropagation();
+                if (triggerPlacementMode) return placeActiveTriggerAt(event.clientY);
+                activeLayerId = layer.id;
+                renderUI();
+            };
             
             // Motion is initially hidden only in scroll mode; the scroll handler
             // replays it when the layer's trigger line enters the viewport.
-            if (layerData.motionEnabled && layerData.motionEffect && scrollPreviewEnabled) div.style.opacity = '0';
+            if (layerData.motionEnabled && layerData.motionEffect) {
+                if (scrollPreviewEnabled) {
+                    div.style.opacity = '0';
+                } else {
+                    div.style.animation = `${layerData.motionEffect} 0.8s ease-out both`;
+                }
+            }
             
             // Apply attention effect
             if (layerData.attentionEffect) {
