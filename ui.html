@@ -1203,6 +1203,7 @@
                     
                     // Build layer styles
                     let inlineStyle = `position:absolute;left:${layer.x}px;top:${layer.y}px;width:${layer.width}px;height:${layer.height}px;background-image:url('${imgSrc}');background-size:100% 100%;background-repeat:no-repeat;`;
+                    let triggerAttrs = '';
                     
                     // Add motion effect class
                     if (layerData.motionEnabled && layerData.motionEffect) {
@@ -1217,7 +1218,6 @@
                     
                     // Store the exact layout coordinate so the exported page uses
                     // the same trigger placement as the plugin preview.
-                    let triggerAttrs = '';
                     if (layerData.triggerEnabled) {
                         const triggerY = layerData.triggerY == null ? layer.y + layer.height / 2 : layerData.triggerY;
                         triggerAttrs = `data-trigger="true" data-trigger-y="${triggerY}" data-layer-name="${layer.name.replace(/"/g, '&quot;')}"`;
