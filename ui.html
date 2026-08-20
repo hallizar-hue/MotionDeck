@@ -1220,7 +1220,7 @@
                     // the same trigger placement as the plugin preview.
                     if (layerData.triggerEnabled) {
                         const triggerY = layerData.triggerY == null ? layer.y + layer.height / 2 : layerData.triggerY;
-                        triggerAttrs = `data-trigger="true" data-trigger-y="${triggerY}" data-layer-name="${layer.name.replace(/"/g, '&quot;')}"`;
+                        triggerAttrs += ` data-trigger="true" data-trigger-y="${triggerY}" data-layer-name="${layer.name.replace(/"/g, '&quot;')}"`;
                     }
                     if (layerData.motionEffect) inlineStyle += `--motion-effect:${layerData.motionEffect};`;
                     
@@ -1243,6 +1243,10 @@
             }
             
             // Generate a browser-like scaler and scroll-driven trigger script.
+            // Build the closing tag without putting a literal script terminator inside
+            // this plugin's own script block. The exported HTML must receive
+            // the real closing tag, not escaped text.
+            const scriptEndTag = String.fromCharCode(60) + '/script>';
             const observerScript = `
                 <script>
                 document.addEventListener('DOMContentLoaded', function() {
@@ -1299,7 +1303,7 @@
                     });
                     runTriggers();
                 });
-                <\\/script>
+                ${scriptEndTag}
             `;
             
             // Responsive styles
